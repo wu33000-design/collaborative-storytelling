@@ -9,6 +9,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import CreateActivity from "./pages/CreateActivity";
 import Home from "./pages/Home";
 import JoinActivity from "./pages/JoinActivity";
+import PlatformAdmin from "./pages/PlatformAdmin";
 import Start from "./pages/Start";
 import StoryRoom from "./pages/StoryRoom";
 
@@ -20,6 +21,7 @@ function Router() {
         <Route path={"/create"} component={CreateActivity} />
         <Route path={"/join"} component={JoinActivity} />
         <Route path={"/room/:groupId"} component={StoryRoom} />
+        <Route path={"/admin"} component={PlatformAdmin} />
         <Route path={"/demo"} component={Home} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
