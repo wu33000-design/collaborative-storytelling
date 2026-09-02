@@ -1,8 +1,7 @@
 import { ArrowRight, PenTool, Users } from "lucide-react";
+import { Link } from "wouter";
 
 export default function Start() {
-  const base = import.meta.env.BASE_URL;
-
   return (
     <div className="min-h-screen bg-[#F5F1E9] px-5 py-12 text-[#1F2E2A] sm:py-20">
       <main className="mx-auto max-w-3xl">
@@ -25,19 +24,19 @@ export default function Start() {
         </p>
 
         <div className="mt-10 grid gap-5 md:grid-cols-2">
-          <a href={`${base}create`} className="group rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+          <Link href="/create" className="group rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
             <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#E8E2D7] text-[#355447]"><PenTool size={20} /></div>
             <h2 className="mt-6 font-serif text-3xl font-semibold tracking-[-0.04em] text-[#233B35]">建立／管理活動</h2>
             <p className="mt-3 text-sm leading-7 text-[#68746B]">建立活動後，你就是該活動的老師。所有設定都可以留白，不設限。</p>
             <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#A64E3C]">前往老師區 <ArrowRight size={16} className="transition group-hover:translate-x-1" /></span>
-          </a>
+          </Link>
 
-          <a href={`${base}join`} className="group rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+          <Link href="/join" className="group rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
             <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#E8E2D7] text-[#355447]"><Users size={20} /></div>
             <h2 className="mt-6 font-serif text-3xl font-semibold tracking-[-0.04em] text-[#233B35]">加入活動</h2>
             <p className="mt-3 text-sm leading-7 text-[#68746B]">輸入老師提供的活動代碼。中途加入也會從加入後開始遵循接力排序機制。</p>
             <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#A64E3C]">輸入活動代碼 <ArrowRight size={16} className="transition group-hover:translate-x-1" /></span>
-          </a>
+          </Link>
         </div>
       </main>
     </div>
