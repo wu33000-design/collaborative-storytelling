@@ -1,13 +1,13 @@
 import { FormEvent, useState } from "react";
-import { ArrowRight, CheckCircle2, KeyRound, Loader2 } from "lucide-react";
-import { Link } from "wouter";
+import { ArrowRight, KeyRound, Loader2 } from "lucide-react";
+import { Link, useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 
 export default function JoinActivity() {
   const [code, setCode] = useState("");
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [groupId, setGroupId] = useState<string | null>(null);
+  const [, setLocation] = useLocation();
 
   const handleJoin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -20,7 +20,6 @@ export default function JoinActivity() {
 
     setJoining(true);
     setError(null);
-    setGroupId(null);
 
     const { data, error: rpcError } = await supabase.rpc("join_activity_by_code", {
       p_code: normalizedCode,
@@ -38,8 +37,7 @@ export default function JoinActivity() {
       return;
     }
 
-    setGroupId(data);
-    setJoining(false);
+    setLocation(`/room/${data}`);
   };
 
   return (
@@ -60,7 +58,7 @@ export default function JoinActivity() {
         <section className="rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm sm:p-10">
           <div className="mb-6 flex h-11 w-11 items-center justify-center rounded-full bg-[#E9E5DA] text-[#355447]"><KeyRound size={20} /></div>
           <h1 className="font-serif text-4xl font-semibold tracking-[-0.045em] text-[#233B35]">加入活動</h1>
-          <p className="mt-4 text-sm leading-7 text-[#68746B]">輸入老師提供的活動代碼。系統會透過 Supabase 後端把你加入可用的小組。</p>
+          <p className="mt-4 text-sm leading-7 text-[#68746B]">輸入老師提供的活動代碼。加入成功後會直接進入你的小組故事房間。</p>
 
           <form className="mt-8" onSubmit={handleJoin}>
             <label htmlFor="activity-code" className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-[#69736B]">活動代碼</label>
@@ -73,7 +71,6 @@ export default function JoinActivity() {
           </form>
 
           {error && <div className="mt-5 rounded-xl border border-[#E7C8BF] bg-[#F7E5DF] px-4 py-3 text-sm leading-6 text-[#8D4033]"><div className="font-semibold">加入失敗</div><div className="mt-1 break-words font-mono text-xs">{error}</div></div>}
-          {groupId && <div className="mt-5 rounded-xl border border-[#CAD8CB] bg-[#EDF3EC] px-4 py-4 text-[#355447]"><div className="flex items-center gap-2 font-semibold"><CheckCircle2 size={18} />已成功加入活動</div><p className="mt-2 text-sm leading-6">後端已將目前帳號加入小組。這是此次回傳的小組 ID：</p><code className="mt-2 block break-all rounded-lg bg-white/70 px-3 py-2 text-xs">{groupId}</code><p className="mt-3 text-xs leading-5 text-[#68746B]">下一階段會用這個 membership 載入真正的故事與接力狀態。</p></div>}
         </section>
 
         <Link href="/demo" className="mt-6 inline-flex text-sm text-[#68746B] underline decoration-[#B9B2A5] underline-offset-4 hover:text-[#233B35]">查看目前的靜態 Story Relay demo</Link>
