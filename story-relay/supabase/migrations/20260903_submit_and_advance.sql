@@ -62,11 +62,12 @@ begin
     raise exception 'Story is not active';
   end if;
 
-  select g.id, a.*
-  into v_group_id, v_activity
+  v_group_id := v_story.group_id;
+
+  select a.* into v_activity
   from public.groups g
   join public.activities a on a.id = g.activity_id
-  where g.id = v_story.group_id
+  where g.id = v_group_id
   limit 1;
 
   if v_activity.id is null or v_activity.status <> 'active' then
