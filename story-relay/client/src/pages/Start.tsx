@@ -1,7 +1,21 @@
-import { ArrowRight, PenTool, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowRight, PenTool, ShieldCheck, Users } from "lucide-react";
 import { Link } from "wouter";
+import { supabase } from "@/lib/supabase";
 
 export default function Start() {
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void supabase.rpc("is_platform_admin").then(({ data }) => {
+      if (active) setIsPlatformAdmin(Boolean(data));
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#F5F1E9] px-5 py-12 text-[#1F2E2A] sm:py-20">
       <main className="mx-auto max-w-3xl">
@@ -38,6 +52,16 @@ export default function Start() {
             <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#A64E3C]">輸入活動代碼 <ArrowRight size={16} className="transition group-hover:translate-x-1" /></span>
           </Link>
         </div>
+
+        {isPlatformAdmin && (
+          <Link href="/admin" className="mt-5 flex items-center justify-between gap-5 rounded-2xl border border-[#C9D5CA] bg-[#E7EFE5] px-6 py-5 transition hover:-translate-y-0.5">
+            <div className="flex items-center gap-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#355447] text-[#FFFDF8]"><ShieldCheck size={18} /></div>
+              <div><div className="font-serif text-xl font-semibold text-[#233B35]">平台管理</div><div className="mt-1 text-xs text-[#68746B]">查看全站成員參與統計並匯出 CSV</div></div>
+            </div>
+            <ArrowRight size={17} className="text-[#355447]" />
+          </Link>
+        )}
       </main>
     </div>
   );
