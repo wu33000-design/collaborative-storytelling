@@ -6,6 +6,7 @@ import AuthGate from "./components/AuthGate";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import JoinActivity from "./pages/JoinActivity";
 
 const routerBase = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
 
@@ -13,9 +14,9 @@ function Router() {
   return (
     <WouterRouter base={routerBase}>
       <Switch>
-        <Route path={"/"} component={Home} />
+        <Route path={"/"} component={JoinActivity} />
+        <Route path={"/demo"} component={Home} />
         <Route path={"/404"} component={NotFound} />
-        {/* Final fallback route */}
         <Route component={NotFound} />
       </Switch>
     </WouterRouter>
