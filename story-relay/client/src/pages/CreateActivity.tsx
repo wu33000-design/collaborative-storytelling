@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { ArrowLeft, CheckCircle2, Copy, Loader2, OctagonX, PlusCircle, RefreshCw } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Copy, Loader2, OctagonX, Pencil, PlusCircle, RefreshCw, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 type Activity = {
@@ -40,6 +40,9 @@ export default function CreateActivity() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(true);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [savingRenameId, setSavingRenameId] = useState<string | null>(null);
 
   const loadActivities = useCallback(async () => {
     setLoadingActivities(true);
@@ -58,11 +61,8 @@ export default function CreateActivity() {
       .eq("teacher_id", userId)
       .order("created_at", { ascending: false });
 
-    if (queryError) {
-      setError(queryError.message);
-    } else {
-      setActivities((data ?? []) as Activity[]);
-    }
+    if (queryError) setError(queryError.message);
+    else setActivities((data ?? []) as Activity[]);
     setLoadingActivities(false);
   }, []);
 
@@ -77,7 +77,6 @@ export default function CreateActivity() {
     setCreated(null);
 
     const deadlineIso = deadline ? new Date(deadline).toISOString() : null;
-
     const { data, error: rpcError } = await supabase.rpc("create_activity", {
       p_name: name.trim() || null,
       p_prompt: prompt.trim() || null,
@@ -95,7 +94,6 @@ export default function CreateActivity() {
       setCreating(false);
       return;
     }
-
     if (!data || typeof data !== "object") {
       setError("後端沒有回傳活動資料。");
       setCreating(false);
@@ -109,20 +107,38 @@ export default function CreateActivity() {
 
   const handleStop = async (activityId: string) => {
     if (!window.confirm("停止後，玩家不能再加入或提交新段落。已寫內容會保留。確定停止？")) return;
-
     setStoppingId(activityId);
     setError(null);
     const { error: rpcError } = await supabase.rpc("stop_activity", { p_activity_id: activityId });
-    if (rpcError) {
-      setError(rpcError.message);
-    }
+    if (rpcError) setError(rpcError.message);
     setStoppingId(null);
     await loadActivities();
   };
 
-  const copyCode = async (code: string) => {
-    await navigator.clipboard.writeText(code);
+  const beginRename = (activity: Activity) => {
+    setRenamingId(activity.id);
+    setRenameValue(activity.name ?? "");
+    setError(null);
   };
+
+  const handleRename = async (activityId: string) => {
+    setSavingRenameId(activityId);
+    setError(null);
+    const { error: rpcError } = await supabase.rpc("rename_activity", {
+      p_activity_id: activityId,
+      p_new_name: renameValue.trim() || null,
+    });
+    if (rpcError) {
+      setError(rpcError.message);
+    } else {
+      setRenamingId(null);
+      setRenameValue("");
+      await loadActivities();
+    }
+    setSavingRenameId(null);
+  };
+
+  const copyCode = async (code: string) => navigator.clipboard.writeText(code);
 
   return (
     <div className="min-h-screen bg-[#F5F1E9] px-5 py-10 text-[#1F2E2A] sm:py-14">
@@ -164,7 +180,7 @@ export default function CreateActivity() {
 
           <aside className="rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm sm:p-8 lg:sticky lg:top-8 lg:self-start">
             <div className="flex items-center justify-between"><div><div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#A06B59]">情境式老師身分</div><h2 className="mt-2 font-serif text-3xl font-semibold tracking-[-0.04em] text-[#233B35]">我的活動</h2></div><button type="button" onClick={() => void loadActivities()} className="rounded-full p-2 text-[#68746B] hover:bg-[#EEE8DE]" aria-label="重新整理"><RefreshCw size={17} /></button></div>
-            <p className="mt-3 text-sm leading-6 text-[#68746B]">你建立的活動會出現在這裡。活動進行中時，玩家可以中途加入；你也可以隨時手動停止。</p>
+            <p className="mt-3 text-sm leading-6 text-[#68746B]">你建立的活動會出現在這裡。名稱可隨時修改且保留歷史；進行中的活動也可手動停止。</p>
 
             <div className="mt-6 space-y-3">
               {loadingActivities && <div className="flex items-center gap-2 text-sm text-[#68746B]"><Loader2 size={16} className="animate-spin" />載入中…</div>}
@@ -172,7 +188,21 @@ export default function CreateActivity() {
               {activities.map((activity) => (
                 <div key={activity.id} className="rounded-2xl border border-[#DED8CC] p-4">
                   <div className="flex items-start justify-between gap-3"><div><div className="font-semibold text-[#30463D]">{activity.name || "未命名活動"}</div><div className="mt-1 font-mono text-xs tracking-[0.08em] text-[#A06B59]">{activity.code}</div></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${activity.status === "active" ? "bg-[#E7EFE5] text-[#456348]" : "bg-[#ECE9E3] text-[#77776F]"}`}>{activity.status}</span></div>
-                  {activity.status === "active" && <button type="button" disabled={stoppingId === activity.id} onClick={() => void handleStop(activity.id)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-[#D8AAA0] px-3 py-2 text-xs font-semibold text-[#9B4637] hover:bg-[#F7E5DF] disabled:opacity-60">{stoppingId === activity.id ? <Loader2 size={14} className="animate-spin" /> : <OctagonX size={14} />}停止活動</button>}
+
+                  {renamingId === activity.id ? (
+                    <div className="mt-4 rounded-xl bg-[#F3EEE5] p-3">
+                      <label className="text-xs font-semibold text-[#56645C]">新名稱（可留白）</label>
+                      <input autoFocus value={renameValue} onChange={(e) => setRenameValue(e.target.value)} className="mt-2 w-full rounded-lg border border-[#CFC8BB] bg-white px-3 py-2 text-sm outline-none focus:border-[#355447]" />
+                      <div className="mt-2 flex gap-2">
+                        <button type="button" disabled={savingRenameId === activity.id} onClick={() => void handleRename(activity.id)} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#355447] px-3 py-2 text-xs font-semibold text-white disabled:opacity-60">{savingRenameId === activity.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}儲存更名</button>
+                        <button type="button" onClick={() => setRenamingId(null)} className="flex items-center justify-center rounded-lg border border-[#D5CEC2] px-3 py-2 text-[#68746B]" aria-label="取消更名"><X size={14} /></button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => beginRename(activity)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-[#BFC8C1] px-3 py-2 text-xs font-semibold text-[#355447] hover:bg-[#EDF3EC]"><Pencil size={14} />更名</button>
+                  )}
+
+                  {activity.status === "active" && <button type="button" disabled={stoppingId === activity.id} onClick={() => void handleStop(activity.id)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-[#D8AAA0] px-3 py-2 text-xs font-semibold text-[#9B4637] hover:bg-[#F7E5DF] disabled:opacity-60">{stoppingId === activity.id ? <Loader2 size={14} className="animate-spin" /> : <OctagonX size={14} />}停止活動</button>}
                 </div>
               ))}
             </div>
