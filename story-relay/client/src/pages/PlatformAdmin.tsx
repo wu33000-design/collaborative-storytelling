@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 type MemberStat = {
   user_id: string;
   display_name: string | null;
+  login_email: string | null;
   activities_created: number;
   activities_joined: number;
   groups_joined: number;
@@ -78,6 +79,7 @@ export default function PlatformAdmin() {
     const header = [
       "user_id",
       "display_name",
+      "login_email",
       "activities_created",
       "activities_joined",
       "groups_joined",
@@ -94,6 +96,7 @@ export default function PlatformAdmin() {
         [
           row.user_id,
           row.display_name ?? "",
+          row.login_email ?? "",
           row.activities_created,
           row.activities_joined,
           row.groups_joined,
@@ -147,7 +150,7 @@ export default function PlatformAdmin() {
                 <div>
                   <div className="flex items-center gap-2 text-[#A64E3C]"><ShieldCheck size={18} /><span className="font-mono text-[10px] uppercase tracking-[0.16em]">Platform Administration</span></div>
                   <h1 className="mt-3 font-serif text-4xl font-semibold tracking-[-0.045em] text-[#233B35] sm:text-5xl">全站成員參與統計</h1>
-                  <p className="mt-4 max-w-2xl text-sm leading-7 text-[#68746B]">每一列代表一個平台帳號。統計跨越該帳號建立與參加的所有活動，不包含故事正文。</p>
+                  <p className="mt-4 max-w-2xl text-sm leading-7 text-[#68746B]">每一列代表一個平台帳號，登入 Email 用來將參與紀錄對應到真實學生身分。統計跨越該帳號建立與參加的所有活動，不包含故事正文。</p>
                 </div>
                 <button type="button" onClick={exportCsv} disabled={rows.length === 0} className="inline-flex items-center gap-2 rounded-xl bg-[#233B35] px-5 py-3 text-sm font-semibold text-[#FFFDF8] disabled:opacity-50"><Download size={16} />匯出 CSV</button>
               </div>
@@ -165,20 +168,21 @@ export default function PlatformAdmin() {
             <section className="mt-6 overflow-hidden rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] shadow-sm">
               <div className="flex items-center gap-2 border-b border-[#E3DDD2] px-6 py-5"><Users size={18} className="text-[#355447]" /><h2 className="font-serif text-xl font-semibold">所有成員</h2></div>
               <div className="overflow-x-auto">
-                <table className="min-w-[1180px] w-full border-collapse text-left text-sm">
+                <table className="min-w-[1320px] w-full border-collapse text-left text-sm">
                   <thead className="bg-[#F3EEE5] text-[11px] uppercase tracking-[0.08em] text-[#777F77]">
                     <tr>
-                      <th className="px-5 py-3">成員</th><th className="px-4 py-3">建立活動</th><th className="px-4 py-3">參加活動</th><th className="px-4 py-3">參加小組</th><th className="px-4 py-3">被選輪次</th><th className="px-4 py-3">提交段落</th><th className="px-4 py-3">提交字元</th><th className="px-4 py-3">首次加入</th><th className="px-4 py-3">最近提交</th>
+                      <th className="px-5 py-3">成員</th><th className="px-4 py-3">登入 Email</th><th className="px-4 py-3">建立活動</th><th className="px-4 py-3">參加活動</th><th className="px-4 py-3">參加小組</th><th className="px-4 py-3">被選輪次</th><th className="px-4 py-3">提交段落</th><th className="px-4 py-3">提交字元</th><th className="px-4 py-3">首次加入</th><th className="px-4 py-3">最近提交</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((row) => (
                       <tr key={row.user_id} className="border-t border-[#EEE8DE] align-top">
                         <td className="px-5 py-4"><div className="font-semibold text-[#2E433B]">{row.display_name || "未命名成員"}</div><div className="mt-1 max-w-[210px] truncate font-mono text-[9px] text-[#91958F]" title={row.user_id}>{row.user_id}</div></td>
+                        <td className="px-4 py-4"><div className="max-w-[260px] truncate font-mono text-xs text-[#3D5149]" title={row.login_email || ""}>{row.login_email || "尚未同步"}</div></td>
                         <td className="px-4 py-4">{row.activities_created}</td><td className="px-4 py-4">{row.activities_joined}</td><td className="px-4 py-4">{row.groups_joined}</td><td className="px-4 py-4">{row.rounds_selected}</td><td className="px-4 py-4">{row.segments_written}</td><td className="px-4 py-4">{row.total_characters}</td><td className="px-4 py-4 whitespace-nowrap text-xs text-[#68746B]">{formatDate(row.first_joined_at)}</td><td className="px-4 py-4 whitespace-nowrap text-xs text-[#68746B]">{formatDate(row.last_submission_at)}</td>
                       </tr>
                     ))}
-                    {rows.length === 0 && <tr><td colSpan={9} className="px-6 py-10 text-center text-sm text-[#777F77]">目前沒有可匯出的成員資料。</td></tr>}
+                    {rows.length === 0 && <tr><td colSpan={10} className="px-6 py-10 text-center text-sm text-[#777F77]">目前沒有可匯出的成員資料。</td></tr>}
                   </tbody>
                 </table>
               </div>
