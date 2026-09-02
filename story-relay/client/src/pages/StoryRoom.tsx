@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BookOpen, Clock3, History, Loader2, RefreshCw, Users } from "lucide-react";
+import { BookOpen, Clock3, History, Loader2, Play, RefreshCw, Users } from "lucide-react";
 import { Link, useRoute } from "wouter";
 import { supabase } from "@/lib/supabase";
 
@@ -10,6 +10,7 @@ type Segment = { id: string; sequence_no: number; author_id: string | null; cont
 type Member = { user_id: string; role: string; joined_at: string };
 type Profile = { id: string; display_name: string; avatar_url: string | null };
 type NameHistory = { id: string; old_name: string | null; new_name: string | null; changed_at: string };
+type RelayRound = { id: string; round_no: number; current_writer_id: string; status: string };
 
 const displayName = (value: string | null) => value || "未命名活動";
 
@@ -25,6 +26,8 @@ export default function StoryRoom() {
   const [members, setMembers] = useState<Member[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [history, setHistory] = useState<NameHistory[]>([]);
+  const [round, setRound] = useState<RelayRound | null>(null);
+  const [startingRound, setStartingRound] = useState(false);
 
   const profileMap = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
 
@@ -82,21 +85,23 @@ export default function StoryRoom() {
     setMembers(loadedMembers);
     setHistory((historyResult.data ?? []) as NameHistory[]);
 
-    const [segmentResult, profileResult] = await Promise.all([
+    const [segmentResult, profileResult, roundResult] = await Promise.all([
       supabase.from("segments").select("id, sequence_no, author_id, content, submitted_at").eq("story_id", loadedStory.id).order("sequence_no"),
       loadedMembers.length > 0
         ? supabase.from("profiles").select("id, display_name, avatar_url").in("id", loadedMembers.map((member) => member.user_id))
         : Promise.resolve({ data: [], error: null }),
+      supabase.from("relay_rounds").select("id, round_no, current_writer_id, status").eq("story_id", loadedStory.id).in("status", ["open", "writing"]).order("round_no", { ascending: false }).limit(1).maybeSingle(),
     ]);
 
-    if (segmentResult.error || profileResult.error) {
-      setError(segmentResult.error?.message || profileResult.error?.message || "讀取房間資料失敗。");
+    if (segmentResult.error || profileResult.error || roundResult.error) {
+      setError(segmentResult.error?.message || profileResult.error?.message || roundResult.error?.message || "讀取房間資料失敗。");
       setLoading(false);
       return;
     }
 
     setSegments((segmentResult.data ?? []) as Segment[]);
     setProfiles((profileResult.data ?? []) as Profile[]);
+    setRound((roundResult.data as RelayRound | null) ?? null);
     setLoading(false);
   }, [groupId]);
 
@@ -104,9 +109,21 @@ export default function StoryRoom() {
     void loadRoom();
   }, [loadRoom]);
 
+  const handleStartRound = async () => {
+    if (!groupId) return;
+    setStartingRound(true);
+    setError(null);
+    const { error: rpcError } = await supabase.rpc("start_relay_round", { p_group_id: groupId });
+    if (rpcError) setError(rpcError.message);
+    setStartingRound(false);
+    await loadRoom();
+  };
+
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center bg-[#F5F1E9] text-[#355447]"><Loader2 className="animate-spin" size={28} /></div>;
   }
+
+  const currentWriter = round ? profileMap.get(round.current_writer_id) : null;
 
   return (
     <div className="min-h-screen bg-[#F5F1E9] px-5 py-10 text-[#1F2E2A] sm:py-14">
@@ -118,7 +135,7 @@ export default function StoryRoom() {
 
         {error ? (
           <section className="mt-8 rounded-2xl border border-[#E7C8BF] bg-[#F7E5DF] p-5 text-[#8D4033]">
-            <div className="font-semibold">房間載入失敗</div>
+            <div className="font-semibold">房間操作失敗</div>
             <div className="mt-2 break-words font-mono text-xs">{error}</div>
           </section>
         ) : activity && group && story ? (
@@ -132,13 +149,23 @@ export default function StoryRoom() {
                 </div>
                 <span className="rounded-full bg-[#E7EFE5] px-3 py-1.5 text-xs font-semibold text-[#456348]">{activity.status}</span>
               </div>
+
+              <div className="mt-6 rounded-2xl bg-[#F3EEE5] p-5">
+                {round ? (
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div><div className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#A06B59]">Round {round.round_no} · {round.status}</div><div className="mt-1 text-sm text-[#34453E]">目前作者：<span className="font-semibold">{currentWriter?.display_name || "參與者"}</span></div></div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-between gap-4"><div><div className="font-semibold text-[#30463D]">接力尚未開始</div><div className="mt-1 text-xs leading-5 text-[#68746B]">開始後，後端會依目前 selection weight 抽出第一位作者。</div></div><button type="button" disabled={startingRound || activity.status !== "active"} onClick={() => void handleStartRound()} className="inline-flex items-center gap-2 rounded-xl bg-[#233B35] px-4 py-2.5 text-sm font-semibold text-[#FFFDF8] disabled:opacity-60">{startingRound ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}開始第一輪</button></div>
+                )}
+              </div>
             </header>
 
             <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.75fr)]">
               <section className="rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm sm:p-8">
                 <div className="flex items-center gap-2"><BookOpen size={19} className="text-[#A64E3C]" /><h2 className="font-serif text-2xl font-semibold">目前故事</h2></div>
                 {segments.length === 0 ? (
-                  <p className="mt-6 rounded-2xl bg-[#F3EEE5] p-5 text-sm leading-7 text-[#68746B]">目前還沒有任何段落。下一階段會在這裡建立第一輪並選出第一位作者。</p>
+                  <p className="mt-6 rounded-2xl bg-[#F3EEE5] p-5 text-sm leading-7 text-[#68746B]">目前還沒有任何段落。</p>
                 ) : (
                   <div className="mt-6 space-y-5">
                     {segments.map((segment) => (
