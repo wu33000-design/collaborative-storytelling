@@ -74,7 +74,7 @@ begin
 
   loop
     v_attempt := v_attempt + 1;
-    v_code := 'SR-' || upper(substr(encode(gen_random_bytes(4), 'hex'), 1, 6));
+    v_code := 'SR-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6));
     exit when not exists (select 1 from public.activities where code = v_code);
     if v_attempt >= 20 then
       raise exception 'Unable to generate a unique activity code';
