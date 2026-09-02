@@ -2,6 +2,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Router as WouterRouter, Switch } from "wouter";
+import { useHashLocation } from "wouter/use-hash-location";
 import AuthGate from "./components/AuthGate";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -11,11 +12,9 @@ import JoinActivity from "./pages/JoinActivity";
 import Start from "./pages/Start";
 import StoryRoom from "./pages/StoryRoom";
 
-const routerBase = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
-
 function Router() {
   return (
-    <WouterRouter base={routerBase}>
+    <WouterRouter hook={useHashLocation}>
       <Switch>
         <Route path={"/"} component={Start} />
         <Route path={"/create"} component={CreateActivity} />
