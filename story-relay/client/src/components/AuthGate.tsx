@@ -8,6 +8,12 @@ function getRedirectUrl() {
   return new URL(import.meta.env.BASE_URL, window.location.origin).toString();
 }
 
+async function syncLoginIdentity(user: User | null) {
+  if (!user) return;
+  const { error } = await supabase.rpc("sync_my_login_identity");
+  if (error) console.warn("Unable to sync login identity:", error.message);
+}
+
 export default function AuthGate({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -19,13 +25,17 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data, error }) => {
       if (!mounted) return;
       if (error) setAuthError(error.message);
-      setUser(data.session?.user ?? null);
+      const sessionUser = data.session?.user ?? null;
+      setUser(sessionUser);
       setLoading(false);
+      void syncLoginIdentity(sessionUser);
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+      const sessionUser = session?.user ?? null;
+      setUser(sessionUser);
       setLoading(false);
+      void syncLoginIdentity(sessionUser);
     });
 
     return () => {
