@@ -9,6 +9,7 @@ import CreateActivity from "./pages/CreateActivity";
 import Home from "./pages/Home";
 import JoinActivity from "./pages/JoinActivity";
 import Start from "./pages/Start";
+import StoryRoom from "./pages/StoryRoom";
 
 const routerBase = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
 
@@ -19,6 +20,7 @@ function Router() {
         <Route path={"/"} component={Start} />
         <Route path={"/create"} component={CreateActivity} />
         <Route path={"/join"} component={JoinActivity} />
+        <Route path={"/room/:groupId"} component={StoryRoom} />
         <Route path={"/demo"} component={Home} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
