@@ -42,14 +42,14 @@ export default function StoryRoom() {
 
   const profileMap = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
 
-  const loadRoom = useCallback(async () => {
+  const loadRoom = useCallback(async (silent = false) => {
     if (!groupId) {
       setError("找不到小組 ID。");
       setLoading(false);
       return;
     }
 
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError(null);
 
     const { data: sessionData } = await supabase.auth.getSession();
@@ -122,6 +122,28 @@ export default function StoryRoom() {
   useEffect(() => {
     void loadRoom();
   }, [loadRoom]);
+
+  useEffect(() => {
+    if (!groupId || !group || !activity || !story) return;
+
+    const refresh = () => {
+      void loadRoom(true);
+    };
+
+    const channel = supabase
+      .channel(`story-room:${groupId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "segments", filter: `story_id=eq.${story.id}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "relay_rounds", filter: `story_id=eq.${story.id}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "stories", filter: `id=eq.${story.id}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "activities", filter: `id=eq.${activity.id}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "activity_name_history", filter: `activity_id=eq.${activity.id}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "group_members", filter: `group_id=eq.${groupId}` }, refresh)
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [activity, group, groupId, loadRoom, story]);
 
   const handleStartRound = async () => {
     if (!groupId) return;
