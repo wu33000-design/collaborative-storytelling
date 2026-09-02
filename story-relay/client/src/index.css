@@ -1,0 +1,37 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Story Relay / 紙上接力：暖紙白、深墨綠、Relay Vermilion；故事長頁優先，朱紅只標記接力狀態。 */
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px); --radius-md: calc(var(--radius) - 2px); --radius-lg: var(--radius); --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background); --color-foreground: var(--foreground); --color-card: var(--card); --color-card-foreground: var(--card-foreground); --color-popover: var(--popover); --color-popover-foreground: var(--popover-foreground); --color-primary: var(--primary); --color-primary-foreground: var(--primary-foreground); --color-secondary: var(--secondary); --color-secondary-foreground: var(--secondary-foreground); --color-muted: var(--muted); --color-muted-foreground: var(--muted-foreground); --color-accent: var(--accent); --color-accent-foreground: var(--accent-foreground); --color-destructive: var(--destructive); --color-destructive-foreground: var(--destructive-foreground); --color-border: var(--border); --color-input: var(--input); --color-ring: var(--ring);
+}
+
+:root { --radius: 0.75rem; --background: #F5F1E9; --foreground: #1F2E2A; --card: #FFFDF8; --card-foreground: #1F2E2A; --popover: #FFFDF8; --popover-foreground: #1F2E2A; --primary: #233B35; --primary-foreground: #F8F5EF; --secondary: #EDE8DE; --secondary-foreground: #425148; --muted: #E7E2D8; --muted-foreground: #68746B; --accent: #D85C45; --accent-foreground: #FFFFFF; --destructive: #B43E39; --destructive-foreground: #FFFFFF; --border: #D8D2C6; --input: #D8D2C6; --ring: #A7B29F; }
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  html { background: #F5F1E9; }
+  body { @apply bg-background text-foreground; margin: 0; font-family: 'Noto Sans TC', sans-serif; }
+  button, textarea { font-family: inherit; }
+  button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [type="button"]:not(:disabled), [type="submit"]:not(:disabled), a[href] { @apply cursor-pointer; }
+}
+
+@layer utilities {
+  .paper-grain { background-image: linear-gradient(rgba(245,241,233,.86), rgba(245,241,233,.86)), url('/manus-storage/story-relay-paper-texture_ee797f43.png'); background-size: auto, 760px auto; }
+  .paper-sheet { position: relative; background: #FFFDF8; box-shadow: 5px 6px 0 rgba(216,210,198,.55), 0 16px 30px rgba(58,66,53,.06); }
+  .paper-sheet::before { content: ''; position: absolute; left: 0; right: 0; top: 12px; border-top: 1px solid rgba(216,210,198,.48); }
+  .editorial-underline { position: relative; display: inline-block; }
+  .editorial-underline::after { content: ''; position: absolute; left: -3px; right: -5px; bottom: -5px; height: 7px; border-bottom: 2px solid #D85C45; border-radius: 48% 52% 44% 56%; transform: rotate(-1.5deg); }
+  .relay-node { position: relative; }
+  .relay-node::after { content: ''; position: absolute; left: 1.55rem; top: 2.2rem; width: 7px; height: 7px; background: #C6C8BD; border-radius: 50%; box-shadow: 0 0 0 3px #F5F1E9; }
+  .font-serif { font-family: 'Fraunces', 'Noto Serif TC', serif; }
+  .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+  .animate-in { animation: rise-in 420ms cubic-bezier(.23,1,.32,1) both; }
+  @keyframes rise-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+}
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; } }
