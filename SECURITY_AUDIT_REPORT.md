@@ -3,7 +3,7 @@
 **審查目標：** `wu33000-design/collaborative-storytelling`
 **審查時間：** 2026-09-03
 **審查性質：** 防禦性靜態檢查，不包含滲透測試、帳號登入、資料庫破壞性操作或秘密值驗證。
-**審查基準 HEAD：** `2a3b100`（本報告初始審查基準）；CLASSROOM_100 後續修補尚在本地工作分支，待驗收後提交。
+**目前驗證 HEAD：** `1f14e9c`（CLASSROOM_100 Phase A 依賴修補與 Phase B migration）；本報告仍不代表實際 Supabase staging 已完成資料庫驗證。
 
 ## 執行摘要
 

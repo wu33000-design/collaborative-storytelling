@@ -7,7 +7,7 @@
 - Repository：<https://github.com/wu33000-design/collaborative-storytelling>
 - 主要目錄：`story-relay/`
 - 相關報告：<https://github.com/wu33000-design/collaborative-storytelling/blob/main/SECURITY_AUDIT_REPORT.md>
-- 目前報告基準 commit：`b353ef8`；CLASSROOM_100 修補變更尚在本地驗證分支。
+- 最新安全基線 commit：`1f14e9c`；Supabase migration 仍需在 staging project 實測。
 - 技術範圍：React／Vite 前端、Supabase Auth、PostgreSQL、RLS、Postgres Functions、Realtime、GitHub Pages。
 - 本任務是修補與驗證，不是滲透測試。不得嘗試入侵第三方帳號、繞過真實使用者授權或破壞資料。
 
