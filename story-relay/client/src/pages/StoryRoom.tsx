@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { BookOpen, Clock3, History, Loader2, PenLine, Play, RefreshCw, Send, Users } from "lucide-react";
+import { BookOpen, Check, Clock3, Hand, History, Loader2, PenLine, Play, RefreshCw, Send, Users } from "lucide-react";
 import { Link, useRoute } from "wouter";
 import { supabase } from "@/lib/supabase";
 
@@ -19,6 +19,8 @@ type Member = { user_id: string; role: string; joined_at: string };
 type Profile = { id: string; display_name: string; avatar_url: string | null };
 type NameHistory = { id: string; old_name: string | null; new_name: string | null; changed_at: string };
 type RelayRound = { id: string; round_no: number; current_writer_id: string; status: string };
+type Nomination = { candidate_id: string };
+type Volunteer = { user_id: string };
 
 const displayName = (value: string | null) => value || "未命名活動";
 
@@ -35,12 +37,17 @@ export default function StoryRoom() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [history, setHistory] = useState<NameHistory[]>([]);
   const [round, setRound] = useState<RelayRound | null>(null);
+  const [nominations, setNominations] = useState<Nomination[]>([]);
+  const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [startingRound, setStartingRound] = useState(false);
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [intentBusy, setIntentBusy] = useState<string | null>(null);
 
   const profileMap = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
+  const nominatedIds = useMemo(() => new Set(nominations.map((item) => item.candidate_id)), [nominations]);
+  const volunteerIds = useMemo(() => new Set(volunteers.map((item) => item.user_id)), [volunteers]);
 
   const loadRoom = useCallback(async (silent = false) => {
     if (!groupId) {
@@ -113,9 +120,26 @@ export default function StoryRoom() {
       return;
     }
 
+    const loadedRound = (roundResult.data as RelayRound | null) ?? null;
     setSegments((segmentResult.data ?? []) as Segment[]);
     setProfiles((profileResult.data ?? []) as Profile[]);
-    setRound((roundResult.data as RelayRound | null) ?? null);
+    setRound(loadedRound);
+
+    if (loadedRound) {
+      const [nominationResult, volunteerResult] = await Promise.all([
+        supabase.from("nominations").select("candidate_id").eq("round_id", loadedRound.id),
+        supabase.from("volunteers").select("user_id").eq("round_id", loadedRound.id),
+      ]);
+      if (nominationResult.error || volunteerResult.error) {
+        setError(nominationResult.error?.message || volunteerResult.error?.message || "讀取下一棒意向失敗。");
+      }
+      setNominations((nominationResult.data ?? []) as Nomination[]);
+      setVolunteers((volunteerResult.data ?? []) as Volunteer[]);
+    } else {
+      setNominations([]);
+      setVolunteers([]);
+    }
+
     setLoading(false);
   }, [groupId]);
 
@@ -138,12 +162,14 @@ export default function StoryRoom() {
       .on("postgres_changes", { event: "*", schema: "public", table: "activities", filter: `id=eq.${activity.id}` }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "activity_name_history", filter: `activity_id=eq.${activity.id}` }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "group_members", filter: `group_id=eq.${groupId}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "nominations", filter: `round_id=eq.${round?.id ?? "00000000-0000-0000-0000-000000000000"}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "volunteers", filter: `round_id=eq.${round?.id ?? "00000000-0000-0000-0000-000000000000"}` }, refresh)
       .subscribe();
 
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [activity, group, groupId, loadRoom, story]);
+  }, [activity, group, groupId, loadRoom, round?.id, story]);
 
   const handleStartRound = async () => {
     if (!groupId) return;
@@ -153,6 +179,29 @@ export default function StoryRoom() {
     if (rpcError) setError(rpcError.message);
     setStartingRound(false);
     await loadRoom();
+  };
+
+  const handleVolunteer = async () => {
+    if (!round) return;
+    setIntentBusy("volunteer");
+    setError(null);
+    const { error: rpcError } = await supabase.rpc("volunteer_for_round", { p_round_id: round.id });
+    if (rpcError) setError(rpcError.message);
+    setIntentBusy(null);
+    await loadRoom(true);
+  };
+
+  const handleNominate = async (candidateId: string) => {
+    if (!round) return;
+    setIntentBusy(candidateId);
+    setError(null);
+    const { error: rpcError } = await supabase.rpc("nominate_candidate", {
+      p_round_id: round.id,
+      p_candidate_id: candidateId,
+    });
+    if (rpcError) setError(rpcError.message);
+    setIntentBusy(null);
+    await loadRoom(true);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -183,6 +232,7 @@ export default function StoryRoom() {
 
   const currentWriter = round ? profileMap.get(round.current_writer_id) : null;
   const isCurrentWriter = Boolean(round && currentUserId && round.current_writer_id === currentUserId);
+  const hasVolunteered = Boolean(currentUserId && volunteerIds.has(currentUserId));
   const draftLength = draft.trim().length;
   const belowMinimum = activity?.min_words != null && draftLength < activity.min_words;
   const aboveMaximum = activity?.max_words != null && draftLength > activity.max_words;
@@ -276,9 +326,47 @@ export default function StoryRoom() {
                             {submitting ? "提交中…" : "提交這一段"}
                           </button>
                         </div>
+                        <p className="mt-3 text-xs leading-5 text-[#8A8F86]">{nominations.length > 0 ? `提交後只會從 ${nominations.length} 位提名者中依等待權重抽選下一棒。` : "目前沒有提名；提交後會從所有合資格同學中依等待權重抽選下一棒。"}</p>
                       </form>
                     ) : (
-                      <div className="mt-5 rounded-2xl bg-[#F3EEE5] p-5 text-sm leading-7 text-[#68746B]">等待 <span className="font-semibold text-[#30463D]">{currentWriter?.display_name || "目前作者"}</span> 完成這一段。提交後系統會自動依最新權重選出下一位作者。</div>
+                      <div className="mt-5 rounded-2xl bg-[#F3EEE5] p-5 text-sm leading-7 text-[#68746B]">等待 <span className="font-semibold text-[#30463D]">{currentWriter?.display_name || "目前作者"}</span> 完成這一段。提交後系統會依提名候選池與最新等待權重選出下一位作者。</div>
+                    )}
+                  </section>
+                )}
+
+                {round && story.status === "active" && (
+                  <section className="rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm sm:p-8">
+                    <div className="flex items-center gap-2"><Hand size={19} className="text-[#A64E3C]" /><h2 className="font-serif text-2xl font-semibold">下一棒意向</h2></div>
+                    <p className="mt-3 text-sm leading-7 text-[#68746B]">志願只表示「我想接著寫」，不會額外增加抽選權重。真正的候選池由目前作者的提名決定；若沒有提名則使用所有合資格同學。</p>
+
+                    {!isCurrentWriter && currentUserId && (
+                      <button type="button" disabled={hasVolunteered || intentBusy === "volunteer"} onClick={() => void handleVolunteer()} className="mt-5 inline-flex items-center gap-2 rounded-xl border border-[#BFC8BE] bg-[#F3F7F1] px-4 py-2.5 text-sm font-semibold text-[#355447] disabled:opacity-60">
+                        {intentBusy === "volunteer" ? <Loader2 size={15} className="animate-spin" /> : hasVolunteered ? <Check size={15} /> : <Hand size={15} />}
+                        {hasVolunteered ? "已登記想接下一棒" : "我想接下一棒"}
+                      </button>
+                    )}
+
+                    {isCurrentWriter && (
+                      <div className="mt-5 space-y-3">
+                        <div className="text-xs font-semibold uppercase tracking-[0.08em] text-[#8A8F86]">提名下一棒候選人，可複選</div>
+                        {members.filter((member) => member.role === "student" && member.user_id !== currentUserId).map((member) => {
+                          const profile = profileMap.get(member.user_id);
+                          const nominated = nominatedIds.has(member.user_id);
+                          const volunteered = volunteerIds.has(member.user_id);
+                          return (
+                            <div key={member.user_id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#F6F1E8] px-4 py-3">
+                              <div>
+                                <div className="text-sm font-semibold text-[#30463D]">{profile?.display_name || "參與者"}</div>
+                                <div className="mt-1 text-[11px] text-[#7B827B]">{volunteered ? "已表示想接下一棒" : "尚未登記志願"}</div>
+                              </div>
+                              <button type="button" disabled={nominated || intentBusy === member.user_id} onClick={() => void handleNominate(member.user_id)} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold ${nominated ? "bg-[#DDE9DE] text-[#355447]" : "border border-[#CFC8BB] bg-white text-[#5F675F]"} disabled:opacity-70`}>
+                                {intentBusy === member.user_id ? <Loader2 size={13} className="animate-spin" /> : nominated ? <Check size={13} /> : null}
+                                {nominated ? "已提名" : "提名"}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
                   </section>
                 )}
@@ -291,7 +379,9 @@ export default function StoryRoom() {
                     {members.map((member) => {
                       const profile = profileMap.get(member.user_id);
                       const selected = round?.current_writer_id === member.user_id;
-                      return <div key={member.user_id} className={`flex items-center gap-3 rounded-xl px-3 py-3 ${selected ? "bg-[#E7EFE5]" : "bg-[#F6F1E8]"}`}><div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#DDE5DC] text-xs font-bold text-[#355447]">{(profile?.display_name || "?").slice(0, 1).toUpperCase()}</div><div className="min-w-0 flex-1"><div className="text-sm font-semibold">{profile?.display_name || "參與者"}</div><div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-[#8A8F86]">{member.role}{selected ? " · current writer" : ""}</div></div></div>;
+                      const volunteered = volunteerIds.has(member.user_id);
+                      const nominated = nominatedIds.has(member.user_id);
+                      return <div key={member.user_id} className={`flex items-center gap-3 rounded-xl px-3 py-3 ${selected ? "bg-[#E7EFE5]" : "bg-[#F6F1E8]"}`}><div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#DDE5DC] text-xs font-bold text-[#355447]">{(profile?.display_name || "?").slice(0, 1).toUpperCase()}</div><div className="min-w-0 flex-1"><div className="text-sm font-semibold">{profile?.display_name || "參與者"}</div><div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-[#8A8F86]">{member.role}{selected ? " · current writer" : ""}{volunteered ? " · volunteer" : ""}{nominated ? " · nominated" : ""}</div></div></div>;
                     })}
                   </div>
                 </section>
