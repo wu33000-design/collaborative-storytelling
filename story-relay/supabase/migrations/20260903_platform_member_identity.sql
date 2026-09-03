@@ -43,9 +43,11 @@ $$;
 revoke all on function public.sync_my_login_identity() from public;
 grant execute on function public.sync_my_login_identity() to authenticated;
 
--- Replace the existing admin statistics RPC, preserving its authorization check
--- while adding the authenticated login email used to map records to students.
-create or replace function public.get_platform_member_stats()
+-- PostgreSQL cannot CREATE OR REPLACE a function when the OUT-column row type
+-- changes. Drop and recreate this zero-argument RPC before adding login_email.
+drop function if exists public.get_platform_member_stats();
+
+create function public.get_platform_member_stats()
 returns table (
   user_id uuid,
   display_name text,
