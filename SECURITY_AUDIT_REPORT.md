@@ -126,6 +126,8 @@ Pages workflow 在 `story-relay` 目錄執行 `pnpm install --no-frozen-lockfile
 
 截至 CLASSROOM_100 Phase A 後續修補：`pnpm install --frozen-lockfile`、`pnpm check` 與 `pnpm build` 已成功；`pnpm audit --prod --audit-level high` 已無 high／critical，結果為 1 項 moderate、5 項 low。Phase A 的高嚴重度依賴門檻已達成；moderate／low 仍需持續追蹤。
 
+Phase C 已新增唯讀 metadata smoke test：`story-relay/supabase/tests/classroom100_phase_c_metadata.sql`。它會檢查業務表 RLS、敏感表直接寫入權限、Realtime publication allowlist 與高影響 SECURITY DEFINER 函式的空 `search_path`。目前尚未在實際 Supabase staging project 執行，因此五角色 RLS、Realtime payload 隔離與 100 人容量仍屬未驗證項目。
+
 ## References
 
 [1] [GitHub Advisory Database：Axios advisories](https://github.com/advisories?query=axios)

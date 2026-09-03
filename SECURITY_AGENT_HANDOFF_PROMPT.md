@@ -76,12 +76,14 @@ Phase A 已完成：Axios 已移除、nanoid 已升級至 5.1.16、Express／Rec
 
 Phase B 已新增 `story-relay/supabase/migrations/20260903_classroom100_security_hardening.sql`，提供 admin audit log、受控唯讀 audit RPC、activity／platform admin trigger，並只對指定高權限 SECURITY DEFINER 函式設定空 search_path。此 migration 尚未套用至實際 Supabase project，必須先在 staging 逐一驗證函式簽名、trigger actor、RLS 與現有 migration 順序。
 
+Phase C 已新增唯讀檢查腳本 `story-relay/supabase/tests/classroom100_phase_c_metadata.sql`，會檢查 RLS 是否啟用、敏感表是否禁止 client 直接寫入、Realtime publication allowlist 與高影響 SECURITY DEFINER 的 search_path。此腳本目前尚未在 staging 執行，不得把靜態檢查結果當成五角色 RLS／Realtime 實測通過。
+
 ## 建議執行順序
 
 1. 先閱讀 `SECURITY_AUDIT_REPORT.md`、`package.json`、`pnpm-lock.yaml`、所有 Supabase migrations 與 `StoryRoom.tsx`。
 2. 建立不含秘密值的檢查紀錄，重新執行 dependency、secret filename／pattern、workflow、RLS 與 migration 靜態檢查。
 3. 維持 production dependency audit 的 0 high／0 critical 基線，定期檢查剩餘 moderate／low advisory 與相容升級。
-4. 在 staging 套用並驗證 `20260903_classroom100_security_hardening.sql`，再確認 `SECURITY DEFINER`、platform admin 與 migration 欄位一致性。
+4. 在 staging 套用並執行 `supabase/tests/classroom100_phase_c_metadata.sql`，再確認 `SECURITY DEFINER`、platform admin 與 migration 欄位一致性。
 5. 執行雙帳號／匿名 RLS 與 Realtime 測試，再進行 XSS 輸入測試。
 6. 每個修補以小而可回滾的 commit 完成；不要把無關 UI 重構混入安全修補。
 7. 更新 `SECURITY_AUDIT_REPORT.md`，明確標示「已修補」「待人工確認」與「未測試」。
