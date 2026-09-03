@@ -55,7 +55,9 @@ begin
 end;
 $$;
 
--- 3) Realtime publication must contain only the intended Story Relay tables.
+-- 3) Realtime publication must contain only the tables intentionally used by
+-- StoryRoom and host monitoring. Frontend filters are not authorization; these
+-- tables still rely on RLS for row-level isolation.
 do $$
 declare
   v_unexpected text;
@@ -67,7 +69,8 @@ begin
     and schemaname = 'public'
     and tablename not in (
       'activities', 'stories', 'group_members', 'segments',
-      'relay_rounds', 'activity_name_history'
+      'relay_rounds', 'activity_name_history',
+      'nominations', 'volunteers', 'activity_events'
     );
 
   if v_unexpected is not null then
