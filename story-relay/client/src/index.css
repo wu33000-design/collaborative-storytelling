@@ -18,6 +18,14 @@
   body { @apply bg-background text-foreground; margin: 0; font-family: 'Noto Sans TC', sans-serif; }
   button, textarea { font-family: inherit; }
   button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [type="button"]:not(:disabled), [type="submit"]:not(:disabled), a[href] { @apply cursor-pointer; }
+
+  /* Every routed page shares one stable desktop frame. Individual page content
+     may still use narrower inner blocks, but navigation no longer shifts the
+     outer left/right boundaries between max-w-xl ... max-w-7xl pages. */
+  #root main {
+    width: 100%;
+    max-width: 72rem !important;
+  }
 }
 
 @layer utilities {
