@@ -34,21 +34,21 @@ export default function Start() {
           你今天想怎麼參與？
         </h1>
         <p className="mt-5 max-w-xl text-sm leading-7 text-[#68746B]">
-          同一個帳號可以在不同活動中扮演不同角色，不需要預先被標記成老師或學生。
+          同一個帳號可以在不同活動中扮演不同角色，不需要預先被標記成主持人或參與者。
         </p>
 
         <div className="mt-10 grid gap-5 md:grid-cols-2">
           <Link href="/create" className="group rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
             <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#E8E2D7] text-[#355447]"><PenTool size={20} /></div>
             <h2 className="mt-6 font-serif text-3xl font-semibold tracking-[-0.04em] text-[#233B35]">建立／管理活動</h2>
-            <p className="mt-3 text-sm leading-7 text-[#68746B]">建立活動後，你就是該活動的老師。所有設定都可以留白，不設限。</p>
-            <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#A64E3C]">前往老師區 <ArrowRight size={16} className="transition group-hover:translate-x-1" /></span>
+            <p className="mt-3 text-sm leading-7 text-[#68746B]">建立活動後，你就是該活動的主持人。所有設定都可以留白，不設限。</p>
+            <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#A64E3C]">前往主持人區 <ArrowRight size={16} className="transition group-hover:translate-x-1" /></span>
           </Link>
 
           <Link href="/join" className="group rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
             <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#E8E2D7] text-[#355447]"><Users size={20} /></div>
             <h2 className="mt-6 font-serif text-3xl font-semibold tracking-[-0.04em] text-[#233B35]">加入活動</h2>
-            <p className="mt-3 text-sm leading-7 text-[#68746B]">輸入老師提供的活動代碼。中途加入也會從加入後開始遵循接力排序機制。</p>
+            <p className="mt-3 text-sm leading-7 text-[#68746B]">輸入主持人提供的活動代碼。中途加入也會從加入後開始遵循接力排序機制。</p>
             <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#A64E3C]">輸入活動代碼 <ArrowRight size={16} className="transition group-hover:translate-x-1" /></span>
           </Link>
         </div>
