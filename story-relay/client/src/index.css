@@ -37,9 +37,9 @@
     table-layout: fixed;
   }
   #root table[class*="min-w-[1220px]"] th:nth-child(1),
-  #root table[class*="min-w-[1220px]"] td:nth-child(1) { width: 15%; }
+  #root table[class*="min-w-[1220px]"] td:nth-child(1) { width: 13%; }
   #root table[class*="min-w-[1220px]"] th:nth-child(2),
-  #root table[class*="min-w-[1220px]"] td:nth-child(2) { width: 18%; }
+  #root table[class*="min-w-[1220px]"] td:nth-child(2) { width: 16%; }
   #root table[class*="min-w-[1220px]"] th:nth-child(3),
   #root table[class*="min-w-[1220px]"] td:nth-child(3) { width: 12%; }
   #root table[class*="min-w-[1220px]"] th:nth-child(4),
@@ -49,16 +49,25 @@
   #root table[class*="min-w-[1220px]"] th:nth-child(6),
   #root table[class*="min-w-[1220px]"] td:nth-child(6) { width: 8%; }
   #root table[class*="min-w-[1220px]"] th:nth-child(7),
-  #root table[class*="min-w-[1220px]"] td:nth-child(7) { width: 17%; }
+  #root table[class*="min-w-[1220px]"] td:nth-child(7) { width: 15%; }
   #root table[class*="min-w-[1220px]"] th:last-child,
   #root table[class*="min-w-[1220px]"] td:last-child {
     position: sticky;
     right: 0;
     z-index: 2;
-    width: 14%;
-    min-width: 9rem;
+    width: 20%;
+    min-width: 13.5rem;
     background: #FFFDF8;
     box-shadow: -8px 0 14px rgba(58,66,53,.06);
+  }
+  #root table[class*="min-w-[1220px]"] td:last-child > div {
+    flex-wrap: nowrap;
+  }
+  #root table[class*="min-w-[1220px]"] td:last-child a,
+  #root table[class*="min-w-[1220px]"] td:last-child button {
+    flex-shrink: 0;
+    white-space: nowrap;
+    writing-mode: horizontal-tb;
   }
   #root table[class*="min-w-[1220px]"] thead th:last-child {
     z-index: 3;
