@@ -333,55 +333,56 @@ export default function StoryRoom() {
                     )}
                   </section>
                 )}
-
-                {round && story.status === "active" && (
-                  <section className="rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm sm:p-8">
-                    <div className="flex items-center gap-2"><Hand size={19} className="text-[#A64E3C]" /><h2 className="font-serif text-2xl font-semibold">下一棒意向</h2></div>
-                    <p className="mt-3 text-sm leading-7 text-[#68746B]">志願只表示「我想接著寫」，不會額外增加抽選權重。真正的候選池由目前作者的提名決定；若沒有提名則使用所有合資格同學。</p>
-
-                    {!isCurrentWriter && currentUserId && (
-                      <button type="button" disabled={hasVolunteered || intentBusy === "volunteer"} onClick={() => void handleVolunteer()} className="mt-5 inline-flex items-center gap-2 rounded-xl border border-[#BFC8BE] bg-[#F3F7F1] px-4 py-2.5 text-sm font-semibold text-[#355447] disabled:opacity-60">
-                        {intentBusy === "volunteer" ? <Loader2 size={15} className="animate-spin" /> : hasVolunteered ? <Check size={15} /> : <Hand size={15} />}
-                        {hasVolunteered ? "已登記想接下一棒" : "我想接下一棒"}
-                      </button>
-                    )}
-
-                    {isCurrentWriter && (
-                      <div className="mt-5 space-y-3">
-                        <div className="text-xs font-semibold uppercase tracking-[0.08em] text-[#8A8F86]">提名下一棒候選人，可複選</div>
-                        {members.filter((member) => member.role === "student" && member.user_id !== currentUserId).map((member) => {
-                          const profile = profileMap.get(member.user_id);
-                          const nominated = nominatedIds.has(member.user_id);
-                          const volunteered = volunteerIds.has(member.user_id);
-                          return (
-                            <div key={member.user_id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#F6F1E8] px-4 py-3">
-                              <div>
-                                <div className="text-sm font-semibold text-[#30463D]">{profile?.display_name || "參與者"}</div>
-                                <div className="mt-1 text-[11px] text-[#7B827B]">{volunteered ? "已表示想接下一棒" : "尚未登記志願"}</div>
-                              </div>
-                              <button type="button" disabled={nominated || intentBusy === member.user_id} onClick={() => void handleNominate(member.user_id)} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold ${nominated ? "bg-[#DDE9DE] text-[#355447]" : "border border-[#CFC8BB] bg-white text-[#5F675F]"} disabled:opacity-70`}>
-                                {intentBusy === member.user_id ? <Loader2 size={13} className="animate-spin" /> : nominated ? <Check size={13} /> : null}
-                                {nominated ? "已提名" : "提名"}
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </section>
-                )}
               </div>
 
               <aside className="space-y-6">
                 <section className="rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-6 shadow-sm">
                   <div className="flex items-center gap-2"><Users size={18} className="text-[#355447]" /><h2 className="font-serif text-xl font-semibold">小組成員</h2></div>
+                  {round && story.status === "active" && <p className="mt-2 text-xs leading-5 text-[#7B827B]">在自己的名字旁登記想接下一棒；目前作者可在其他成員旁提名候選人。</p>}
                   <div className="mt-4 space-y-3">
                     {members.map((member) => {
                       const profile = profileMap.get(member.user_id);
                       const selected = round?.current_writer_id === member.user_id;
                       const volunteered = volunteerIds.has(member.user_id);
                       const nominated = nominatedIds.has(member.user_id);
-                      return <div key={member.user_id} className={`flex items-center gap-3 rounded-xl px-3 py-3 ${selected ? "bg-[#E7EFE5]" : "bg-[#F6F1E8]"}`}><div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#DDE5DC] text-xs font-bold text-[#355447]">{(profile?.display_name || "?").slice(0, 1).toUpperCase()}</div><div className="min-w-0 flex-1"><div className="text-sm font-semibold">{profile?.display_name || "參與者"}</div><div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-[#8A8F86]">{member.role}{selected ? " · current writer" : ""}{volunteered ? " · volunteer" : ""}{nominated ? " · nominated" : ""}</div></div></div>;
+                      const isSelf = currentUserId === member.user_id;
+                      const canVolunteer = Boolean(round && story.status === "active" && isSelf && member.role === "student" && !isCurrentWriter);
+                      const canNominate = Boolean(round && story.status === "active" && isCurrentWriter && !isSelf && member.role === "student");
+
+                      return (
+                        <div key={member.user_id} className={`flex items-center gap-3 rounded-xl px-3 py-3 ${selected ? "bg-[#E7EFE5]" : "bg-[#F6F1E8]"}`}>
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#DDE5DC] text-xs font-bold text-[#355447]">{(profile?.display_name || "?").slice(0, 1).toUpperCase()}</div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-semibold">{profile?.display_name || "參與者"}{isSelf ? <span className="ml-1 text-[10px] font-normal text-[#8A8F86]">（你）</span> : null}</div>
+                            <div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-[#8A8F86]">{member.role}{selected ? " · current writer" : ""}{volunteered ? " · volunteer" : ""}{nominated ? " · nominated" : ""}</div>
+                          </div>
+
+                          {round && story.status === "active" && isSelf && member.role === "student" && (
+                            <button
+                              type="button"
+                              disabled={!canVolunteer || hasVolunteered || intentBusy === "volunteer"}
+                              onClick={() => void handleVolunteer()}
+                              className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition ${hasVolunteered ? "bg-[#DDE9DE] text-[#355447]" : "bg-[#355447] text-[#FFFDF8] hover:bg-[#426558]"} disabled:cursor-not-allowed disabled:opacity-55`}
+                              title={isCurrentWriter ? "目前作者不能登記成為自己的下一棒" : "登記想接下一棒"}
+                            >
+                              {intentBusy === "volunteer" ? <Loader2 size={13} className="animate-spin" /> : hasVolunteered ? <Check size={13} /> : <Hand size={13} />}
+                              {hasVolunteered ? "已登記" : "登記"}
+                            </button>
+                          )}
+
+                          {canNominate && (
+                            <button
+                              type="button"
+                              disabled={nominated || intentBusy === member.user_id}
+                              onClick={() => void handleNominate(member.user_id)}
+                              className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition ${nominated ? "bg-[#F1DCD5] text-[#8D4033]" : "bg-[#A64E3C] text-[#FFFDF8] hover:bg-[#8D4033]"} disabled:cursor-not-allowed disabled:opacity-65`}
+                            >
+                              {intentBusy === member.user_id ? <Loader2 size={13} className="animate-spin" /> : nominated ? <Check size={13} /> : null}
+                              {nominated ? "已提名" : "提名"}
+                            </button>
+                          )}
+                        </div>
+                      );
                     })}
                   </div>
                 </section>
