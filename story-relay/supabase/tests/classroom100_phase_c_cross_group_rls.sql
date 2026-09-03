@@ -7,37 +7,14 @@
 --   the non-host Group B participant cannot read Group A; anon must see neither.
 --
 -- Safety:
---   This script creates fixture rows inside one transaction and ALWAYS rolls the
---   transaction back. It does not create auth users and leaves no fixture data.
+--   All fixture rows are created inside one transaction and ALWAYS rolled back.
+--   No auth users are created and no fixture data remains.
+--
+-- Implementation note:
+--   This version deliberately avoids temporary tables because Supabase SQL Editor
+--   role switching can make pg_temp objects unavailable to authenticated/anon.
 
 begin;
-
-create temp table classroom100_fixture (
-  mode text not null,
-  host_user_id uuid not null,
-  user_a_id uuid not null,
-  user_b_id uuid not null,
-  activity_id uuid not null,
-  group_a_id uuid not null,
-  group_b_id uuid not null,
-  story_a_id uuid not null,
-  story_b_id uuid not null,
-  segment_a_id uuid not null,
-  segment_b_id uuid not null,
-  round_a_id uuid not null,
-  round_b_id uuid not null
-) on commit drop;
-
-create temp table classroom100_results (
-  role_name text not null,
-  check_name text not null,
-  observed integer not null,
-  expected integer not null,
-  passed boolean not null
-) on commit drop;
-
-grant select on pg_temp.classroom100_fixture to anon, authenticated;
-grant insert, select on pg_temp.classroom100_results to anon, authenticated;
 
 do $$
 declare
@@ -45,6 +22,7 @@ declare
   v_a uuid;
   v_b uuid;
   v_mode text;
+
   v_activity uuid := gen_random_uuid();
   v_ga uuid := gen_random_uuid();
   v_gb uuid := gen_random_uuid();
@@ -54,7 +32,24 @@ declare
   v_segb uuid := gen_random_uuid();
   v_ra uuid := gen_random_uuid();
   v_rb uuid := gen_random_uuid();
+
+  v_count integer;
+  v_checks integer := 0;
+  v_failed text := null;
+
+  procedure assert_count(p_role text, p_check text, p_observed integer, p_expected integer)
+  language plpgsql
+  as $proc$
+  begin
+    v_checks := v_checks + 1;
+    if p_observed <> p_expected then
+      v_failed := concat_ws('; ', v_failed,
+        p_role || ':' || p_check || ' observed=' || p_observed || ' expected=' || p_expected);
+    end if;
+  end;
+  $proc$;
 begin
+  -- Pick a host below the 3-activity cap.
   select p.id
   into v_host
   from public.profiles p
@@ -92,8 +87,16 @@ begin
     v_mode := 'THREE_ACCOUNT_SYMMETRIC';
   end if;
 
+  -- Create rollback-only fixture as SQL Editor owner before role simulation.
   insert into public.activities (id, teacher_id, code, name, status, group_size)
-  values (v_activity, v_host, 'C1-' || upper(substr(replace(v_activity::text, '-', ''), 1, 6)), 'CLASSROOM_100 C1 rollback fixture', 'active', 1);
+  values (
+    v_activity,
+    v_host,
+    'C1-' || upper(substr(replace(v_activity::text, '-', ''), 1, 6)),
+    'CLASSROOM_100 C1 rollback fixture',
+    'active',
+    1
+  );
 
   insert into public.groups (id, activity_id, name)
   values (v_ga, v_activity, 'C1 Group A'),
@@ -120,101 +123,86 @@ begin
   values (v_ra, v_sa, 1, v_a, 'writing'),
          (v_rb, v_sb, 1, v_b, 'writing');
 
-  insert into pg_temp.classroom100_fixture values (
-    v_mode, v_host, v_a, v_b, v_activity, v_ga, v_gb, v_sa, v_sb,
-    v_sega, v_segb, v_ra, v_rb
-  );
-end;
-$$;
+  -- Participant B: always a non-host participant.
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claim.sub', v_b::text, true);
+  perform set_config('request.jwt.claims', jsonb_build_object('sub', v_b, 'role', 'authenticated')::text, true);
 
--- Participant B: always a non-host participant.
-set local role authenticated;
-select set_config('request.jwt.claim.sub', (select user_b_id::text from pg_temp.classroom100_fixture), true);
-select set_config('request.jwt.claims', jsonb_build_object('sub', (select user_b_id from pg_temp.classroom100_fixture), 'role', 'authenticated')::text, true);
+  select count(*) into v_count from public.groups where id = v_gb;
+  call assert_count('participant_b', 'own_group', v_count, 1);
+  select count(*) into v_count from public.groups where id = v_ga;
+  call assert_count('participant_b', 'other_group', v_count, 0);
 
-insert into pg_temp.classroom100_results
-select 'participant_b', 'own_group', count(*)::int, 1, count(*) = 1 from public.groups where id = (select group_b_id from pg_temp.classroom100_fixture);
-insert into pg_temp.classroom100_results
-select 'participant_b', 'other_group', count(*)::int, 0, count(*) = 0 from public.groups where id = (select group_a_id from pg_temp.classroom100_fixture);
-insert into pg_temp.classroom100_results
-select 'participant_b', 'own_story', count(*)::int, 1, count(*) = 1 from public.stories where id = (select story_b_id from pg_temp.classroom100_fixture);
-insert into pg_temp.classroom100_results
-select 'participant_b', 'other_story', count(*)::int, 0, count(*) = 0 from public.stories where id = (select story_a_id from pg_temp.classroom100_fixture);
-insert into pg_temp.classroom100_results
-select 'participant_b', 'own_segment', count(*)::int, 1, count(*) = 1 from public.segments where id = (select segment_b_id from pg_temp.classroom100_fixture);
-insert into pg_temp.classroom100_results
-select 'participant_b', 'other_segment', count(*)::int, 0, count(*) = 0 from public.segments where id = (select segment_a_id from pg_temp.classroom100_fixture);
-insert into pg_temp.classroom100_results
-select 'participant_b', 'own_round', count(*)::int, 1, count(*) = 1 from public.relay_rounds where id = (select round_b_id from pg_temp.classroom100_fixture);
-insert into pg_temp.classroom100_results
-select 'participant_b', 'other_round', count(*)::int, 0, count(*) = 0 from public.relay_rounds where id = (select round_a_id from pg_temp.classroom100_fixture);
-reset role;
+  select count(*) into v_count from public.stories where id = v_sb;
+  call assert_count('participant_b', 'own_story', v_count, 1);
+  select count(*) into v_count from public.stories where id = v_sa;
+  call assert_count('participant_b', 'other_story', v_count, 0);
 
--- Participant A symmetric checks are valid only when A is distinct from host.
-do $$
-begin
-  if (select mode from pg_temp.classroom100_fixture) = 'THREE_ACCOUNT_SYMMETRIC' then
+  select count(*) into v_count from public.segments where id = v_segb;
+  call assert_count('participant_b', 'own_segment', v_count, 1);
+  select count(*) into v_count from public.segments where id = v_sega;
+  call assert_count('participant_b', 'other_segment', v_count, 0);
+
+  select count(*) into v_count from public.relay_rounds where id = v_rb;
+  call assert_count('participant_b', 'own_round', v_count, 1);
+  select count(*) into v_count from public.relay_rounds where id = v_ra;
+  call assert_count('participant_b', 'other_round', v_count, 0);
+
+  -- Participant A symmetric test only when A is not also the activity host.
+  if v_mode = 'THREE_ACCOUNT_SYMMETRIC' then
     perform set_config('role', 'authenticated', true);
-    perform set_config('request.jwt.claim.sub', (select user_a_id::text from pg_temp.classroom100_fixture), true);
-    perform set_config('request.jwt.claims', jsonb_build_object('sub', (select user_a_id from pg_temp.classroom100_fixture), 'role', 'authenticated')::text, true);
+    perform set_config('request.jwt.claim.sub', v_a::text, true);
+    perform set_config('request.jwt.claims', jsonb_build_object('sub', v_a, 'role', 'authenticated')::text, true);
 
-    insert into pg_temp.classroom100_results
-    select 'participant_a', 'own_group', count(*)::int, 1, count(*) = 1 from public.groups where id = (select group_a_id from pg_temp.classroom100_fixture);
-    insert into pg_temp.classroom100_results
-    select 'participant_a', 'other_group', count(*)::int, 0, count(*) = 0 from public.groups where id = (select group_b_id from pg_temp.classroom100_fixture);
-    insert into pg_temp.classroom100_results
-    select 'participant_a', 'own_story', count(*)::int, 1, count(*) = 1 from public.stories where id = (select story_a_id from pg_temp.classroom100_fixture);
-    insert into pg_temp.classroom100_results
-    select 'participant_a', 'other_story', count(*)::int, 0, count(*) = 0 from public.stories where id = (select story_b_id from pg_temp.classroom100_fixture);
-    insert into pg_temp.classroom100_results
-    select 'participant_a', 'own_segment', count(*)::int, 1, count(*) = 1 from public.segments where id = (select segment_a_id from pg_temp.classroom100_fixture);
-    insert into pg_temp.classroom100_results
-    select 'participant_a', 'other_segment', count(*)::int, 0, count(*) = 0 from public.segments where id = (select segment_b_id from pg_temp.classroom100_fixture);
-    insert into pg_temp.classroom100_results
-    select 'participant_a', 'own_round', count(*)::int, 1, count(*) = 1 from public.relay_rounds where id = (select round_a_id from pg_temp.classroom100_fixture);
-    insert into pg_temp.classroom100_results
-    select 'participant_a', 'other_round', count(*)::int, 0, count(*) = 0 from public.relay_rounds where id = (select round_b_id from pg_temp.classroom100_fixture);
+    select count(*) into v_count from public.groups where id = v_ga;
+    call assert_count('participant_a', 'own_group', v_count, 1);
+    select count(*) into v_count from public.groups where id = v_gb;
+    call assert_count('participant_a', 'other_group', v_count, 0);
 
-    perform set_config('role', 'none', true);
+    select count(*) into v_count from public.stories where id = v_sa;
+    call assert_count('participant_a', 'own_story', v_count, 1);
+    select count(*) into v_count from public.stories where id = v_sb;
+    call assert_count('participant_a', 'other_story', v_count, 0);
+
+    select count(*) into v_count from public.segments where id = v_sega;
+    call assert_count('participant_a', 'own_segment', v_count, 1);
+    select count(*) into v_count from public.segments where id = v_segb;
+    call assert_count('participant_a', 'other_segment', v_count, 0);
+
+    select count(*) into v_count from public.relay_rounds where id = v_ra;
+    call assert_count('participant_a', 'own_round', v_count, 1);
+    select count(*) into v_count from public.relay_rounds where id = v_rb;
+    call assert_count('participant_a', 'other_round', v_count, 0);
   end if;
-end;
-$$;
 
--- Anonymous -------------------------------------------------------------------
-set local role anon;
-select set_config('request.jwt.claim.sub', '', true);
-select set_config('request.jwt.claims', '{"role":"anon"}', true);
-insert into pg_temp.classroom100_results
-select 'anon', 'group_a_hidden', count(*)::int, 0, count(*) = 0 from public.groups where id = (select group_a_id from pg_temp.classroom100_fixture);
-insert into pg_temp.classroom100_results
-select 'anon', 'story_a_hidden', count(*)::int, 0, count(*) = 0 from public.stories where id = (select story_a_id from pg_temp.classroom100_fixture);
-insert into pg_temp.classroom100_results
-select 'anon', 'segment_a_hidden', count(*)::int, 0, count(*) = 0 from public.segments where id = (select segment_a_id from pg_temp.classroom100_fixture);
-insert into pg_temp.classroom100_results
-select 'anon', 'round_a_hidden', count(*)::int, 0, count(*) = 0 from public.relay_rounds where id = (select round_a_id from pg_temp.classroom100_fixture);
-reset role;
+  -- Anonymous user must not see fixture content.
+  perform set_config('role', 'anon', true);
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', '{"role":"anon"}', true);
 
--- Evaluate before rollback.
-do $$
-declare
-  v_failed text;
-begin
-  select string_agg(role_name || ':' || check_name || ' observed=' || observed || ' expected=' || expected, '; ' order by role_name, check_name)
-  into v_failed
-  from pg_temp.classroom100_results
-  where not passed;
+  select count(*) into v_count from public.groups where id = v_ga;
+  call assert_count('anon', 'group_a_hidden', v_count, 0);
+  select count(*) into v_count from public.stories where id = v_sa;
+  call assert_count('anon', 'story_a_hidden', v_count, 0);
+  select count(*) into v_count from public.segments where id = v_sega;
+  call assert_count('anon', 'segment_a_hidden', v_count, 0);
+  select count(*) into v_count from public.relay_rounds where id = v_ra;
+  call assert_count('anon', 'round_a_hidden', v_count, 0);
+
+  -- Restore SQL Editor role before reporting.
+  perform set_config('role', 'none', true);
 
   if v_failed is not null then
     raise exception 'CLASSROOM_100 C1 cross-group RLS failed: %', v_failed;
   end if;
+
+  raise notice 'CLASSROOM_100 C1 cross-group RLS passed | mode=% | checks=% | fixture will be rolled back',
+    v_mode, v_checks;
 end;
 $$;
 
-select
-  (select mode from pg_temp.classroom100_fixture) as test_mode,
-  'CLASSROOM_100 C1 cross-group RLS passed; fixture will now be rolled back' as result,
-  count(*) as checks_passed
-from pg_temp.classroom100_results
-where passed;
-
 rollback;
+
+-- If the query finishes successfully, the DO block raised no exception and all
+-- fixture data has been rolled back.
+select 'CLASSROOM_100 C1 cross-group RLS passed' as result;
