@@ -140,7 +140,7 @@ export default function PlatformAdmin() {
           <section className="mt-10 rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-8 shadow-sm">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#F3EEE5] text-[#A64E3C]"><ShieldCheck size={22} /></div>
             <h1 className="mt-5 font-serif text-3xl font-semibold text-[#233B35]">平台管理者權限</h1>
-            <p className="mt-3 max-w-xl text-sm leading-7 text-[#68746B]">目前登入帳號沒有平台管理者權限。平台統計資料不會回傳給一般老師或參與者。</p>
+            <p className="mt-3 max-w-xl text-sm leading-7 text-[#68746B]">目前登入帳號沒有平台管理者權限。平台統計資料不會回傳給一般主持人或參與者。</p>
             {error && <div className="mt-5 rounded-2xl bg-[#F7E5DF] p-4 font-mono text-xs text-[#8D4033]">{error}</div>}
           </section>
         ) : (
@@ -150,7 +150,7 @@ export default function PlatformAdmin() {
                 <div>
                   <div className="flex items-center gap-2 text-[#A64E3C]"><ShieldCheck size={18} /><span className="font-mono text-[10px] uppercase tracking-[0.16em]">Platform Administration</span></div>
                   <h1 className="mt-3 font-serif text-4xl font-semibold tracking-[-0.045em] text-[#233B35] sm:text-5xl">全站成員參與統計</h1>
-                  <p className="mt-4 max-w-2xl text-sm leading-7 text-[#68746B]">每一列代表一個平台帳號，登入 Email 用來將參與紀錄對應到真實學生身分。統計跨越該帳號建立與參加的所有活動，不包含故事正文。</p>
+                  <p className="mt-4 max-w-2xl text-sm leading-7 text-[#68746B]">每一列代表一個平台帳號，登入 Email 用來將參與紀錄對應到真實參與者身分。統計跨越該帳號建立與參加的所有活動，不包含故事正文。</p>
                 </div>
                 <button type="button" onClick={exportCsv} disabled={rows.length === 0} className="inline-flex items-center gap-2 rounded-xl bg-[#233B35] px-5 py-3 text-sm font-semibold text-[#FFFDF8] disabled:opacity-50"><Download size={16} />匯出 CSV</button>
               </div>
@@ -161,7 +161,7 @@ export default function PlatformAdmin() {
             <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-2xl border border-[#D8D2C6] bg-[#FFFDF8] p-5"><div className="text-xs text-[#7C827B]">平台成員</div><div className="mt-2 font-serif text-3xl font-semibold">{totals.members}</div></div>
               <div className="rounded-2xl border border-[#D8D2C6] bg-[#FFFDF8] p-5"><div className="text-xs text-[#7C827B]">已建立活動</div><div className="mt-2 font-serif text-3xl font-semibold">{totals.activities}</div></div>
-              <div className="rounded-2xl border border-[#D8D2C6] bg-[#FFFDF8] p-5"><div className="text-xs text-[#7C827B]">玩家提交段落</div><div className="mt-2 font-serif text-3xl font-semibold">{totals.segments}</div></div>
+              <div className="rounded-2xl border border-[#D8D2C6] bg-[#FFFDF8] p-5"><div className="text-xs text-[#7C827B]">參與者提交段落</div><div className="mt-2 font-serif text-3xl font-semibold">{totals.segments}</div></div>
               <div className="rounded-2xl border border-[#D8D2C6] bg-[#FFFDF8] p-5"><div className="text-xs text-[#7C827B]">累計提交字元</div><div className="mt-2 font-serif text-3xl font-semibold">{totals.characters}</div></div>
             </section>
 
