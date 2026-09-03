@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { ArrowLeft, BarChart3, CheckCircle2, Copy, DoorOpen, Loader2, OctagonX, Pencil, PlusCircle, RefreshCw, Trash2, X } from "lucide-react";
+import { ArrowLeft, BarChart3, CheckCircle2, Copy, DoorOpen, Loader2, MoreHorizontal, OctagonX, Pencil, PlusCircle, RefreshCw, Trash2, X } from "lucide-react";
 import { Link } from "wouter";
 import { supabase } from "@/lib/supabase";
 
@@ -43,6 +43,7 @@ export default function CreateActivity() {
   const [enteringId, setEnteringId] = useState<string | null>(null);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [menuId, setMenuId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [savingRenameId, setSavingRenameId] = useState<string | null>(null);
@@ -51,7 +52,6 @@ export default function CreateActivity() {
     setLoadingActivities(true);
     const { data: sessionData } = await supabase.auth.getSession();
     const userId = sessionData.session?.user.id;
-
     if (!userId) {
       setError("找不到登入中的使用者。");
       setLoadingActivities(false);
@@ -70,9 +70,7 @@ export default function CreateActivity() {
     setLoadingActivities(false);
   }, []);
 
-  useEffect(() => {
-    void loadActivities();
-  }, [loadActivities]);
+  useEffect(() => { void loadActivities(); }, [loadActivities]);
 
   const hostAtLimit = activities.length >= 3;
 
@@ -82,11 +80,9 @@ export default function CreateActivity() {
       setError("每個帳號最多可擔任 3 個未刪除活動的主持人。請先刪除一個活動後再建立新的活動。");
       return;
     }
-
     setCreating(true);
     setError(null);
     setCreated(null);
-
     const deadlineIso = deadline ? new Date(deadline).toISOString() : null;
     const { data, error: rpcError } = await supabase.rpc("create_activity", {
       p_name: name.trim() || null,
@@ -99,27 +95,18 @@ export default function CreateActivity() {
       p_required_segments: optionalInt(requiredSegments),
       p_deadline: deadlineIso,
     });
-
-    if (rpcError) {
-      setError(rpcError.message);
-      setCreating(false);
-      return;
+    if (rpcError) setError(rpcError.message);
+    else if (!data || typeof data !== "object") setError("後端沒有回傳活動資料。");
+    else {
+      setCreated(data as CreateResult);
+      await loadActivities();
     }
-    if (!data || typeof data !== "object") {
-      setError("後端沒有回傳活動資料。");
-      setCreating(false);
-      return;
-    }
-
-    setCreated(data as CreateResult);
     setCreating(false);
-    await loadActivities();
   };
 
   const handleEnter = async (activity: Activity) => {
     setEnteringId(activity.id);
     setError(null);
-
     const { data: sessionData } = await supabase.auth.getSession();
     const userId = sessionData.session?.user.id;
     if (!userId) {
@@ -133,7 +120,6 @@ export default function CreateActivity() {
       .select("group_id")
       .eq("user_id", userId)
       .is("left_at", null);
-
     if (membershipError) {
       setError(membershipError.message);
       setEnteringId(null);
@@ -142,7 +128,6 @@ export default function CreateActivity() {
 
     const joinedGroupIds = (memberships ?? []).map((row) => row.group_id as string);
     let groupId: string | null = null;
-
     if (joinedGroupIds.length > 0) {
       const { data: joinedGroups, error: joinedGroupError } = await supabase
         .from("groups")
@@ -151,7 +136,6 @@ export default function CreateActivity() {
         .in("id", joinedGroupIds)
         .order("created_at", { ascending: true })
         .limit(1);
-
       if (joinedGroupError) {
         setError(joinedGroupError.message);
         setEnteringId(null);
@@ -167,7 +151,6 @@ export default function CreateActivity() {
         .eq("activity_id", activity.id)
         .order("created_at", { ascending: true })
         .limit(1);
-
       if (groupError) {
         setError(groupError.message);
         setEnteringId(null);
@@ -181,11 +164,11 @@ export default function CreateActivity() {
       setEnteringId(null);
       return;
     }
-
     window.location.hash = `/room/${groupId}`;
   };
 
   const handleStop = async (activityId: string) => {
+    setMenuId(null);
     if (!window.confirm("停止後，參與者不能再加入或提交新段落。已寫內容會保留，而且停止中的活動仍計入 3 個主持活動上限。確定停止？")) return;
     setStoppingId(activityId);
     setError(null);
@@ -196,6 +179,7 @@ export default function CreateActivity() {
   };
 
   const handleDelete = async (activity: Activity) => {
+    setMenuId(null);
     if (!window.confirm(`刪除「${activity.name || "未命名活動"}」後，你將看不到此活動。平台管理者可在 30 天內恢復，之後會永久清除。確定刪除？`)) return;
     setDeletingId(activity.id);
     setError(null);
@@ -212,6 +196,7 @@ export default function CreateActivity() {
   };
 
   const beginRename = (activity: Activity) => {
+    setMenuId(null);
     setRenamingId(activity.id);
     setRenameValue(activity.name ?? "");
     setError(null);
@@ -224,9 +209,8 @@ export default function CreateActivity() {
       p_activity_id: activityId,
       p_new_name: renameValue.trim() || null,
     });
-    if (rpcError) {
-      setError(rpcError.message);
-    } else {
+    if (rpcError) setError(rpcError.message);
+    else {
       setRenamingId(null);
       setRenameValue("");
       await loadActivities();
@@ -255,10 +239,8 @@ export default function CreateActivity() {
                 <label className="text-sm"><span className="mb-2 block font-semibold">活動名稱</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="可留白" className="w-full rounded-xl border border-[#CFC8BB] bg-white px-4 py-3 outline-none focus:border-[#355447]" /></label>
                 <label className="text-sm"><span className="mb-2 block font-semibold">每組人數</span><input type="number" min="1" value={groupSize} onChange={(e) => setGroupSize(e.target.value)} placeholder="留白 = 不限人數" className="w-full rounded-xl border border-[#CFC8BB] bg-white px-4 py-3 outline-none focus:border-[#355447]" /></label>
               </div>
-
               <label className="block text-sm"><span className="mb-2 block font-semibold">故事提示</span><textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="可留白" rows={3} className="w-full rounded-xl border border-[#CFC8BB] bg-white px-4 py-3 outline-none focus:border-[#355447]" /></label>
               <label className="block text-sm"><span className="mb-2 block font-semibold">Writer 0 初始文字</span><textarea value={initialText} onChange={(e) => setInitialText(e.target.value)} placeholder="可留白；留白時故事從第一位參與者開始" rows={4} className="w-full rounded-xl border border-[#CFC8BB] bg-white px-4 py-3 outline-none focus:border-[#355447]" /></label>
-
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 <label className="text-sm"><span className="mb-2 block font-semibold">每輪秒數</span><input type="number" min="1" value={timeLimit} onChange={(e) => setTimeLimit(e.target.value)} placeholder="不限" className="w-full rounded-xl border border-[#CFC8BB] bg-white px-4 py-3 outline-none focus:border-[#355447]" /></label>
                 <label className="text-sm"><span className="mb-2 block font-semibold">最少字數</span><input type="number" min="0" value={minWords} onChange={(e) => setMinWords(e.target.value)} placeholder="不限" className="w-full rounded-xl border border-[#CFC8BB] bg-white px-4 py-3 outline-none focus:border-[#355447]" /></label>
@@ -266,7 +248,6 @@ export default function CreateActivity() {
                 <label className="text-sm"><span className="mb-2 block font-semibold">完成段落數</span><input type="number" min="1" value={requiredSegments} onChange={(e) => setRequiredSegments(e.target.value)} placeholder="不自動結束" className="w-full rounded-xl border border-[#CFC8BB] bg-white px-4 py-3 outline-none focus:border-[#355447]" /></label>
                 <label className="text-sm sm:col-span-2"><span className="mb-2 block font-semibold">截止時間</span><input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} className="w-full rounded-xl border border-[#CFC8BB] bg-white px-4 py-3 outline-none focus:border-[#355447]" /></label>
               </div>
-
               <button type="submit" disabled={creating || loadingActivities || hostAtLimit} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#233B35] px-5 py-3 text-sm font-semibold text-[#FFFDF8] transition hover:bg-[#304D44] disabled:cursor-not-allowed disabled:opacity-45">
                 {creating ? <Loader2 size={17} className="animate-spin" /> : <PlusCircle size={17} />}
                 {creating ? "建立中…" : hostAtLimit ? "已達 3 個活動上限" : "建立活動"}
@@ -279,34 +260,43 @@ export default function CreateActivity() {
 
           <aside className="rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm sm:p-8 lg:sticky lg:top-8 lg:self-start">
             <div className="flex items-center justify-between"><div><div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#A06B59]">情境式主持人身分</div><h2 className="mt-2 font-serif text-3xl font-semibold tracking-[-0.04em] text-[#233B35]">我的活動</h2></div><button type="button" onClick={() => void loadActivities()} className="rounded-full p-2 text-[#68746B] hover:bg-[#EEE8DE]" aria-label="重新整理"><RefreshCw size={17} /></button></div>
-            <p className="mt-3 text-sm leading-6 text-[#68746B]">每個帳號最多主持 3 個未刪除活動，包含停止中的活動。你可以直接進入、監控、停止或刪除自己主持的活動；刪除後只有平台管理者能在 30 天內恢復。</p>
+            <p className="mt-3 text-sm leading-6 text-[#68746B]">每個帳號最多主持 3 個未刪除活動。常用操作保留在卡片上，管理操作收在更多選單中。</p>
 
             <div className="mt-6 space-y-3">
               {loadingActivities && <div className="flex items-center gap-2 text-sm text-[#68746B]"><Loader2 size={16} className="animate-spin" />載入中…</div>}
               {!loadingActivities && activities.length === 0 && <p className="rounded-xl bg-[#F3EEE5] p-4 text-sm text-[#68746B]">你還沒有建立任何活動。</p>}
               {activities.map((activity) => (
-                <div key={activity.id} className="rounded-2xl border border-[#DED8CC] p-4">
-                  <div className="flex items-start justify-between gap-3"><div><div className="font-semibold text-[#30463D]">{activity.name || "未命名活動"}</div><div className="mt-1 font-mono text-xs tracking-[0.08em] text-[#A06B59]">{activity.code}</div></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${activity.status === "active" ? "bg-[#E7EFE5] text-[#456348]" : "bg-[#ECE9E3] text-[#77776F]"}`}>{activity.status}</span></div>
+                <div key={activity.id} className="relative rounded-2xl border border-[#DED8CC] p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div><div className="font-semibold text-[#30463D]">{activity.name || "未命名活動"}</div><div className="mt-1 font-mono text-xs tracking-[0.08em] text-[#A06B59]">{activity.code}</div></div>
+                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold tracking-[0.08em] ${activity.status === "active" ? "bg-[#E7EFE5] text-[#456348]" : "bg-[#ECE9E3] text-[#77776F]"}`}>{activity.status === "active" ? "進行中" : "已停止"}</span>
+                  </div>
 
-                  <button type="button" disabled={enteringId === activity.id} onClick={() => void handleEnter(activity)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[#A64E3C] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#8F4033] disabled:opacity-60">{enteringId === activity.id ? <Loader2 size={14} className="animate-spin" /> : <DoorOpen size={14} />}進入活動</button>
-                  <Link href={`/teacher/activity/${activity.id}`} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-[#233B35] px-3 py-2 text-xs font-semibold text-[#FFFDF8] transition hover:bg-[#304D44]"><BarChart3 size={14} />活動監控</Link>
+                  <div className="mt-4 grid grid-cols-[1fr_auto_auto] gap-2">
+                    <button type="button" disabled={enteringId === activity.id} onClick={() => void handleEnter(activity)} className="flex items-center justify-center gap-2 rounded-lg bg-[#A64E3C] px-3 py-2 text-xs font-semibold text-white hover:bg-[#8F4033] disabled:opacity-60">{enteringId === activity.id ? <Loader2 size={14} className="animate-spin" /> : <DoorOpen size={14} />}進入活動</button>
+                    <Link href={`/teacher/activity/${activity.id}`} className="flex items-center justify-center gap-2 rounded-lg border border-[#BFC8C1] px-3 py-2 text-xs font-semibold text-[#355447] hover:bg-[#EDF3EC]"><BarChart3 size={14} /><span className="hidden sm:inline">活動監控</span></Link>
+                    <button type="button" onClick={() => setMenuId(menuId === activity.id ? null : activity.id)} className="flex items-center justify-center rounded-lg border border-[#D5CEC2] px-3 py-2 text-[#56645C] hover:bg-[#F3EEE5]" aria-label="更多操作"><MoreHorizontal size={17} /></button>
+                  </div>
 
-                  {renamingId === activity.id ? (
-                    <div className="mt-2 rounded-xl bg-[#F3EEE5] p-3">
+                  {menuId === activity.id && (
+                    <div className="absolute right-4 z-20 mt-2 w-44 overflow-hidden rounded-xl border border-[#D8D2C6] bg-[#FFFDF8] py-1 shadow-lg">
+                      <button type="button" onClick={() => beginRename(activity)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#355447] hover:bg-[#F3EEE5]"><Pencil size={14} />更名</button>
+                      {activity.status === "active" && <button type="button" disabled={stoppingId === activity.id} onClick={() => void handleStop(activity.id)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#8D4033] hover:bg-[#F7E5DF] disabled:opacity-60"><OctagonX size={14} />停止活動</button>}
+                      <div className="my-1 border-t border-[#E3DDD2]" />
+                      <button type="button" disabled={deletingId === activity.id} onClick={() => void handleDelete(activity)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-[#8D4033] hover:bg-[#F7E5DF] disabled:opacity-60"><Trash2 size={14} />刪除活動</button>
+                    </div>
+                  )}
+
+                  {renamingId === activity.id && (
+                    <div className="mt-3 rounded-xl bg-[#F3EEE5] p-3">
                       <label className="text-xs font-semibold text-[#56645C]">新名稱（可留白）</label>
                       <input autoFocus value={renameValue} onChange={(e) => setRenameValue(e.target.value)} className="mt-2 w-full rounded-lg border border-[#CFC8BB] bg-white px-3 py-2 text-sm outline-none focus:border-[#355447]" />
                       <div className="mt-2 flex gap-2">
                         <button type="button" disabled={savingRenameId === activity.id} onClick={() => void handleRename(activity.id)} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#355447] px-3 py-2 text-xs font-semibold text-white disabled:opacity-60">{savingRenameId === activity.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}儲存更名</button>
-                        <button type="button" onClick={() => setRenamingId(null)} className="flex items-center justify-center rounded-lg border border-[#D5CEC2] px-3 py-2 text-[#68746B]" aria-label="取消更名"><X size={14} /></button>
+                        <button type="button" onClick={() => { setRenamingId(null); setRenameValue(""); }} className="flex items-center justify-center rounded-lg border border-[#D5CEC2] px-3 py-2 text-[#68746B]" aria-label="取消更名"><X size={14} /></button>
                       </div>
                     </div>
-                  ) : (
-                    <button type="button" onClick={() => beginRename(activity)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-[#BFC8C1] px-3 py-2 text-xs font-semibold text-[#355447] hover:bg-[#EDF3EC]"><Pencil size={14} />更名</button>
                   )}
-
-                  {activity.status === "active" && <button type="button" disabled={stoppingId === activity.id || deletingId === activity.id} onClick={() => void handleStop(activity.id)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-[#D8AAA0] px-3 py-2 text-xs font-semibold text-[#9B4637] hover:bg-[#F7E5DF] disabled:opacity-60">{stoppingId === activity.id ? <Loader2 size={14} className="animate-spin" /> : <OctagonX size={14} />}停止活動</button>}
-
-                  <button type="button" disabled={deletingId === activity.id || stoppingId === activity.id} onClick={() => void handleDelete(activity)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-[#8D4033] px-3 py-2 text-xs font-semibold text-white hover:bg-[#783529] disabled:opacity-60">{deletingId === activity.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}刪除活動</button>
                 </div>
               ))}
             </div>
