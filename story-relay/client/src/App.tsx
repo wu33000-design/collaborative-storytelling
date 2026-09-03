@@ -8,6 +8,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import JoinActivity from "./pages/JoinActivity";
+import PlatformActivityContent from "./pages/PlatformActivityContent";
 import PlatformActivityDeletion from "./pages/PlatformActivityDeletion";
 import PlatformAdminShell from "./pages/PlatformAdminShell";
 import Start from "./pages/Start";
@@ -26,6 +27,7 @@ function Router() {
         <Route path={"/teacher"} component={TeacherDashboardIndex} />
         <Route path={"/teacher/activity/:activityId"} component={TeacherActivityDashboard} />
         <Route path={"/room/:groupId"} component={StoryRoom} />
+        <Route path={"/admin/activity/:activityId/content"} component={PlatformActivityContent} />
         <Route path={"/admin/activity-delete"} component={PlatformActivityDeletion} />
         <Route path={"/admin"} component={PlatformAdminShell} />
         <Route path={"/demo"} component={Home} />
