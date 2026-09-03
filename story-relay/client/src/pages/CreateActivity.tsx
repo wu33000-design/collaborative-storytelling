@@ -107,7 +107,7 @@ export default function CreateActivity() {
   };
 
   const handleStop = async (activityId: string) => {
-    if (!window.confirm("停止後，玩家不能再加入或提交新段落。已寫內容會保留。確定停止？")) return;
+    if (!window.confirm("停止後，參與者不能再加入或提交新段落。已寫內容會保留。確定停止？")) return;
     setStoppingId(activityId);
     setError(null);
     const { error: rpcError } = await supabase.rpc("stop_activity", { p_activity_id: activityId });
@@ -148,7 +148,7 @@ export default function CreateActivity() {
 
         <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
           <section className="rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm sm:p-9">
-            <div className="flex items-center gap-3"><PlusCircle size={22} className="text-[#A64E3C]" /><span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#A06B59]">老師區</span></div>
+            <div className="flex items-center gap-3"><PlusCircle size={22} className="text-[#A64E3C]" /><span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#A06B59]">主持人區</span></div>
             <h1 className="mt-4 font-serif text-4xl font-semibold tracking-[-0.045em] text-[#233B35]">建立活動</h1>
             <p className="mt-4 text-sm leading-7 text-[#68746B]">全部欄位都非必要。限制欄位留白代表不設限；文字欄位留白就保持空白。</p>
 
@@ -159,7 +159,7 @@ export default function CreateActivity() {
               </div>
 
               <label className="block text-sm"><span className="mb-2 block font-semibold">故事提示</span><textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="可留白" rows={3} className="w-full rounded-xl border border-[#CFC8BB] bg-white px-4 py-3 outline-none focus:border-[#355447]" /></label>
-              <label className="block text-sm"><span className="mb-2 block font-semibold">Writer 0 初始文字</span><textarea value={initialText} onChange={(e) => setInitialText(e.target.value)} placeholder="可留白；留白時故事從第一位玩家開始" rows={4} className="w-full rounded-xl border border-[#CFC8BB] bg-white px-4 py-3 outline-none focus:border-[#355447]" /></label>
+              <label className="block text-sm"><span className="mb-2 block font-semibold">Writer 0 初始文字</span><textarea value={initialText} onChange={(e) => setInitialText(e.target.value)} placeholder="可留白；留白時故事從第一位參與者開始" rows={4} className="w-full rounded-xl border border-[#CFC8BB] bg-white px-4 py-3 outline-none focus:border-[#355447]" /></label>
 
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 <label className="text-sm"><span className="mb-2 block font-semibold">每輪秒數</span><input type="number" min="1" value={timeLimit} onChange={(e) => setTimeLimit(e.target.value)} placeholder="不限" className="w-full rounded-xl border border-[#CFC8BB] bg-white px-4 py-3 outline-none focus:border-[#355447]" /></label>
@@ -175,12 +175,12 @@ export default function CreateActivity() {
               </button>
             </form>
 
-            {created && <div className="mt-6 rounded-2xl border border-[#CAD8CB] bg-[#EDF3EC] p-5 text-[#355447]"><div className="flex items-center gap-2 font-semibold"><CheckCircle2 size={18} />活動已建立並啟用</div><p className="mt-3 text-sm">把這個代碼提供給玩家：</p><div className="mt-2 flex items-center gap-2"><code className="rounded-lg bg-white/80 px-4 py-2 font-mono text-lg font-bold tracking-[0.08em]">{created.code}</code><button type="button" onClick={() => copyCode(created.code)} className="rounded-lg p-2 hover:bg-white" aria-label="複製活動代碼"><Copy size={17} /></button></div></div>}
+            {created && <div className="mt-6 rounded-2xl border border-[#CAD8CB] bg-[#EDF3EC] p-5 text-[#355447]"><div className="flex items-center gap-2 font-semibold"><CheckCircle2 size={18} />活動已建立並啟用</div><p className="mt-3 text-sm">把這個代碼提供給參與者：</p><div className="mt-2 flex items-center gap-2"><code className="rounded-lg bg-white/80 px-4 py-2 font-mono text-lg font-bold tracking-[0.08em]">{created.code}</code><button type="button" onClick={() => copyCode(created.code)} className="rounded-lg p-2 hover:bg-white" aria-label="複製活動代碼"><Copy size={17} /></button></div></div>}
             {error && <div className="mt-6 rounded-xl border border-[#E7C8BF] bg-[#F7E5DF] px-4 py-3 text-sm text-[#8D4033]"><div className="font-semibold">操作失敗</div><div className="mt-1 break-words font-mono text-xs">{error}</div></div>}
           </section>
 
           <aside className="rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm sm:p-8 lg:sticky lg:top-8 lg:self-start">
-            <div className="flex items-center justify-between"><div><div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#A06B59]">情境式老師身分</div><h2 className="mt-2 font-serif text-3xl font-semibold tracking-[-0.04em] text-[#233B35]">我的活動</h2></div><button type="button" onClick={() => void loadActivities()} className="rounded-full p-2 text-[#68746B] hover:bg-[#EEE8DE]" aria-label="重新整理"><RefreshCw size={17} /></button></div>
+            <div className="flex items-center justify-between"><div><div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#A06B59]">情境式主持人身分</div><h2 className="mt-2 font-serif text-3xl font-semibold tracking-[-0.04em] text-[#233B35]">我的活動</h2></div><button type="button" onClick={() => void loadActivities()} className="rounded-full p-2 text-[#68746B] hover:bg-[#EEE8DE]" aria-label="重新整理"><RefreshCw size={17} /></button></div>
             <p className="mt-3 text-sm leading-6 text-[#68746B]">你建立的活動會出現在這裡。名稱可隨時修改且保留歷史；進行中的活動也可手動停止。</p>
 
             <div className="mt-6 space-y-3">
