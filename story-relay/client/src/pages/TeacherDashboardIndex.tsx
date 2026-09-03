@@ -31,6 +31,7 @@ export default function TeacherDashboardIndex() {
       .from("activities")
       .select("id, code, name, status, created_at")
       .eq("teacher_id", userId)
+      .is("deleted_at", null)
       .order("created_at", { ascending: false });
 
     if (queryError) setError(queryError.message);
