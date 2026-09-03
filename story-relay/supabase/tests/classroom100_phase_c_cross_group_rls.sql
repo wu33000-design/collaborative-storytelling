@@ -11,8 +11,8 @@
 --   No auth users are created and no fixture data remains.
 --
 -- Implementation note:
---   This version deliberately avoids temporary tables because Supabase SQL Editor
---   role switching can make pg_temp objects unavailable to authenticated/anon.
+--   This version deliberately avoids temporary tables and local procedures so it
+--   runs in Supabase SQL Editor while switching between authenticated/anon roles.
 
 begin;
 
@@ -36,18 +36,6 @@ declare
   v_count integer;
   v_checks integer := 0;
   v_failed text := null;
-
-  procedure assert_count(p_role text, p_check text, p_observed integer, p_expected integer)
-  language plpgsql
-  as $proc$
-  begin
-    v_checks := v_checks + 1;
-    if p_observed <> p_expected then
-      v_failed := concat_ws('; ', v_failed,
-        p_role || ':' || p_check || ' observed=' || p_observed || ' expected=' || p_expected);
-    end if;
-  end;
-  $proc$;
 begin
   -- Pick a host below the 3-activity cap.
   select p.id
@@ -129,24 +117,32 @@ begin
   perform set_config('request.jwt.claims', jsonb_build_object('sub', v_b, 'role', 'authenticated')::text, true);
 
   select count(*) into v_count from public.groups where id = v_gb;
-  call assert_count('participant_b', 'own_group', v_count, 1);
+  v_checks := v_checks + 1;
+  if v_count <> 1 then v_failed := concat_ws('; ', v_failed, 'participant_b:own_group observed=' || v_count || ' expected=1'); end if;
   select count(*) into v_count from public.groups where id = v_ga;
-  call assert_count('participant_b', 'other_group', v_count, 0);
+  v_checks := v_checks + 1;
+  if v_count <> 0 then v_failed := concat_ws('; ', v_failed, 'participant_b:other_group observed=' || v_count || ' expected=0'); end if;
 
   select count(*) into v_count from public.stories where id = v_sb;
-  call assert_count('participant_b', 'own_story', v_count, 1);
+  v_checks := v_checks + 1;
+  if v_count <> 1 then v_failed := concat_ws('; ', v_failed, 'participant_b:own_story observed=' || v_count || ' expected=1'); end if;
   select count(*) into v_count from public.stories where id = v_sa;
-  call assert_count('participant_b', 'other_story', v_count, 0);
+  v_checks := v_checks + 1;
+  if v_count <> 0 then v_failed := concat_ws('; ', v_failed, 'participant_b:other_story observed=' || v_count || ' expected=0'); end if;
 
   select count(*) into v_count from public.segments where id = v_segb;
-  call assert_count('participant_b', 'own_segment', v_count, 1);
+  v_checks := v_checks + 1;
+  if v_count <> 1 then v_failed := concat_ws('; ', v_failed, 'participant_b:own_segment observed=' || v_count || ' expected=1'); end if;
   select count(*) into v_count from public.segments where id = v_sega;
-  call assert_count('participant_b', 'other_segment', v_count, 0);
+  v_checks := v_checks + 1;
+  if v_count <> 0 then v_failed := concat_ws('; ', v_failed, 'participant_b:other_segment observed=' || v_count || ' expected=0'); end if;
 
   select count(*) into v_count from public.relay_rounds where id = v_rb;
-  call assert_count('participant_b', 'own_round', v_count, 1);
+  v_checks := v_checks + 1;
+  if v_count <> 1 then v_failed := concat_ws('; ', v_failed, 'participant_b:own_round observed=' || v_count || ' expected=1'); end if;
   select count(*) into v_count from public.relay_rounds where id = v_ra;
-  call assert_count('participant_b', 'other_round', v_count, 0);
+  v_checks := v_checks + 1;
+  if v_count <> 0 then v_failed := concat_ws('; ', v_failed, 'participant_b:other_round observed=' || v_count || ' expected=0'); end if;
 
   -- Participant A symmetric test only when A is not also the activity host.
   if v_mode = 'THREE_ACCOUNT_SYMMETRIC' then
@@ -155,24 +151,32 @@ begin
     perform set_config('request.jwt.claims', jsonb_build_object('sub', v_a, 'role', 'authenticated')::text, true);
 
     select count(*) into v_count from public.groups where id = v_ga;
-    call assert_count('participant_a', 'own_group', v_count, 1);
+    v_checks := v_checks + 1;
+    if v_count <> 1 then v_failed := concat_ws('; ', v_failed, 'participant_a:own_group observed=' || v_count || ' expected=1'); end if;
     select count(*) into v_count from public.groups where id = v_gb;
-    call assert_count('participant_a', 'other_group', v_count, 0);
+    v_checks := v_checks + 1;
+    if v_count <> 0 then v_failed := concat_ws('; ', v_failed, 'participant_a:other_group observed=' || v_count || ' expected=0'); end if;
 
     select count(*) into v_count from public.stories where id = v_sa;
-    call assert_count('participant_a', 'own_story', v_count, 1);
+    v_checks := v_checks + 1;
+    if v_count <> 1 then v_failed := concat_ws('; ', v_failed, 'participant_a:own_story observed=' || v_count || ' expected=1'); end if;
     select count(*) into v_count from public.stories where id = v_sb;
-    call assert_count('participant_a', 'other_story', v_count, 0);
+    v_checks := v_checks + 1;
+    if v_count <> 0 then v_failed := concat_ws('; ', v_failed, 'participant_a:other_story observed=' || v_count || ' expected=0'); end if;
 
     select count(*) into v_count from public.segments where id = v_sega;
-    call assert_count('participant_a', 'own_segment', v_count, 1);
+    v_checks := v_checks + 1;
+    if v_count <> 1 then v_failed := concat_ws('; ', v_failed, 'participant_a:own_segment observed=' || v_count || ' expected=1'); end if;
     select count(*) into v_count from public.segments where id = v_segb;
-    call assert_count('participant_a', 'other_segment', v_count, 0);
+    v_checks := v_checks + 1;
+    if v_count <> 0 then v_failed := concat_ws('; ', v_failed, 'participant_a:other_segment observed=' || v_count || ' expected=0'); end if;
 
     select count(*) into v_count from public.relay_rounds where id = v_ra;
-    call assert_count('participant_a', 'own_round', v_count, 1);
+    v_checks := v_checks + 1;
+    if v_count <> 1 then v_failed := concat_ws('; ', v_failed, 'participant_a:own_round observed=' || v_count || ' expected=1'); end if;
     select count(*) into v_count from public.relay_rounds where id = v_rb;
-    call assert_count('participant_a', 'other_round', v_count, 0);
+    v_checks := v_checks + 1;
+    if v_count <> 0 then v_failed := concat_ws('; ', v_failed, 'participant_a:other_round observed=' || v_count || ' expected=0'); end if;
   end if;
 
   -- Anonymous user must not see fixture content.
@@ -181,13 +185,17 @@ begin
   perform set_config('request.jwt.claims', '{"role":"anon"}', true);
 
   select count(*) into v_count from public.groups where id = v_ga;
-  call assert_count('anon', 'group_a_hidden', v_count, 0);
+  v_checks := v_checks + 1;
+  if v_count <> 0 then v_failed := concat_ws('; ', v_failed, 'anon:group_a_hidden observed=' || v_count || ' expected=0'); end if;
   select count(*) into v_count from public.stories where id = v_sa;
-  call assert_count('anon', 'story_a_hidden', v_count, 0);
+  v_checks := v_checks + 1;
+  if v_count <> 0 then v_failed := concat_ws('; ', v_failed, 'anon:story_a_hidden observed=' || v_count || ' expected=0'); end if;
   select count(*) into v_count from public.segments where id = v_sega;
-  call assert_count('anon', 'segment_a_hidden', v_count, 0);
+  v_checks := v_checks + 1;
+  if v_count <> 0 then v_failed := concat_ws('; ', v_failed, 'anon:segment_a_hidden observed=' || v_count || ' expected=0'); end if;
   select count(*) into v_count from public.relay_rounds where id = v_ra;
-  call assert_count('anon', 'round_a_hidden', v_count, 0);
+  v_checks := v_checks + 1;
+  if v_count <> 0 then v_failed := concat_ws('; ', v_failed, 'anon:round_a_hidden observed=' || v_count || ' expected=0'); end if;
 
   -- Restore SQL Editor role before reporting.
   perform set_config('role', 'none', true);
