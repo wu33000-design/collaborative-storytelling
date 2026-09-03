@@ -26,6 +26,44 @@
     width: 100%;
     max-width: 72rem !important;
   }
+
+  /* Platform activity management uses the same physical table in both the
+     current and recycle-bin views. Fix its column geometry so switching views
+     cannot resize the table, and keep the action column visible while the
+     middle columns scroll on narrower screens. */
+  #root table[class*="min-w-[1220px]"] {
+    width: 100%;
+    min-width: 68rem !important;
+    table-layout: fixed;
+  }
+  #root table[class*="min-w-[1220px]"] th:nth-child(1),
+  #root table[class*="min-w-[1220px]"] td:nth-child(1) { width: 15%; }
+  #root table[class*="min-w-[1220px]"] th:nth-child(2),
+  #root table[class*="min-w-[1220px]"] td:nth-child(2) { width: 18%; }
+  #root table[class*="min-w-[1220px]"] th:nth-child(3),
+  #root table[class*="min-w-[1220px]"] td:nth-child(3) { width: 12%; }
+  #root table[class*="min-w-[1220px]"] th:nth-child(4),
+  #root table[class*="min-w-[1220px]"] td:nth-child(4),
+  #root table[class*="min-w-[1220px]"] th:nth-child(5),
+  #root table[class*="min-w-[1220px]"] td:nth-child(5),
+  #root table[class*="min-w-[1220px]"] th:nth-child(6),
+  #root table[class*="min-w-[1220px]"] td:nth-child(6) { width: 8%; }
+  #root table[class*="min-w-[1220px]"] th:nth-child(7),
+  #root table[class*="min-w-[1220px]"] td:nth-child(7) { width: 17%; }
+  #root table[class*="min-w-[1220px]"] th:last-child,
+  #root table[class*="min-w-[1220px]"] td:last-child {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    width: 14%;
+    min-width: 9rem;
+    background: #FFFDF8;
+    box-shadow: -8px 0 14px rgba(58,66,53,.06);
+  }
+  #root table[class*="min-w-[1220px]"] thead th:last-child {
+    z-index: 3;
+    background: #F3EEE5;
+  }
 }
 
 @layer utilities {
