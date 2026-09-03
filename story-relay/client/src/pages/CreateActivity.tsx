@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { ArrowLeft, CheckCircle2, Copy, Loader2, OctagonX, Pencil, PlusCircle, RefreshCw, X } from "lucide-react";
+import { ArrowLeft, BarChart3, CheckCircle2, Copy, Loader2, OctagonX, Pencil, PlusCircle, RefreshCw, X } from "lucide-react";
+import { Link } from "wouter";
 import { supabase } from "@/lib/supabase";
 
 type Activity = {
@@ -189,8 +190,10 @@ export default function CreateActivity() {
                 <div key={activity.id} className="rounded-2xl border border-[#DED8CC] p-4">
                   <div className="flex items-start justify-between gap-3"><div><div className="font-semibold text-[#30463D]">{activity.name || "未命名活動"}</div><div className="mt-1 font-mono text-xs tracking-[0.08em] text-[#A06B59]">{activity.code}</div></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${activity.status === "active" ? "bg-[#E7EFE5] text-[#456348]" : "bg-[#ECE9E3] text-[#77776F]"}`}>{activity.status}</span></div>
 
+                  <Link href={`/teacher/activity/${activity.id}`} className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[#233B35] px-3 py-2 text-xs font-semibold text-[#FFFDF8] transition hover:bg-[#304D44]"><BarChart3 size={14} />活動監控</Link>
+
                   {renamingId === activity.id ? (
-                    <div className="mt-4 rounded-xl bg-[#F3EEE5] p-3">
+                    <div className="mt-2 rounded-xl bg-[#F3EEE5] p-3">
                       <label className="text-xs font-semibold text-[#56645C]">新名稱（可留白）</label>
                       <input autoFocus value={renameValue} onChange={(e) => setRenameValue(e.target.value)} className="mt-2 w-full rounded-lg border border-[#CFC8BB] bg-white px-3 py-2 text-sm outline-none focus:border-[#355447]" />
                       <div className="mt-2 flex gap-2">
@@ -199,7 +202,7 @@ export default function CreateActivity() {
                       </div>
                     </div>
                   ) : (
-                    <button type="button" onClick={() => beginRename(activity)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-[#BFC8C1] px-3 py-2 text-xs font-semibold text-[#355447] hover:bg-[#EDF3EC]"><Pencil size={14} />更名</button>
+                    <button type="button" onClick={() => beginRename(activity)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-[#BFC8C1] px-3 py-2 text-xs font-semibold text-[#355447] hover:bg-[#EDF3EC]"><Pencil size={14} />更名</button>
                   )}
 
                   {activity.status === "active" && <button type="button" disabled={stoppingId === activity.id} onClick={() => void handleStop(activity.id)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-[#D8AAA0] px-3 py-2 text-xs font-semibold text-[#9B4637] hover:bg-[#F7E5DF] disabled:opacity-60">{stoppingId === activity.id ? <Loader2 size={14} className="animate-spin" /> : <OctagonX size={14} />}停止活動</button>}
