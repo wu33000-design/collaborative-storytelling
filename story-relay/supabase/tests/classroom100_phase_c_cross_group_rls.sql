@@ -36,8 +36,8 @@ create temp table classroom100_results (
   passed boolean not null
 ) on commit drop;
 
-grant select on classroom100_fixture to anon, authenticated;
-grant insert, select on classroom100_results to anon, authenticated;
+grant select on pg_temp.classroom100_fixture to anon, authenticated;
+grant insert, select on pg_temp.classroom100_results to anon, authenticated;
 
 do $$
 declare
@@ -55,8 +55,6 @@ declare
   v_ra uuid := gen_random_uuid();
   v_rb uuid := gen_random_uuid();
 begin
-  -- Prefer a host below the 3-activity cap so the production host-limit trigger
-  -- does not reject this rollback-only fixture.
   select p.id
   into v_host
   from public.profiles p
@@ -79,7 +77,6 @@ begin
     raise exception 'C1 fixture requires at least 2 existing profile-backed accounts. No data was changed.';
   end if;
 
-  -- If a third account exists, use the full symmetric participant test.
   select p.id
   into v_a
   from public.profiles p
@@ -123,61 +120,60 @@ begin
   values (v_ra, v_sa, 1, v_a, 'writing'),
          (v_rb, v_sb, 1, v_b, 'writing');
 
-  insert into classroom100_fixture values (
+  insert into pg_temp.classroom100_fixture values (
     v_mode, v_host, v_a, v_b, v_activity, v_ga, v_gb, v_sa, v_sb,
     v_sega, v_segb, v_ra, v_rb
   );
 end;
 $$;
 
--- Participant B: always a non-host participant. This is the critical classroom
--- cross-group denial check in both two-account and three-account modes.
+-- Participant B: always a non-host participant.
 set local role authenticated;
-select set_config('request.jwt.claim.sub', (select user_b_id::text from classroom100_fixture), true);
-select set_config('request.jwt.claims', jsonb_build_object('sub', (select user_b_id from classroom100_fixture), 'role', 'authenticated')::text, true);
+select set_config('request.jwt.claim.sub', (select user_b_id::text from pg_temp.classroom100_fixture), true);
+select set_config('request.jwt.claims', jsonb_build_object('sub', (select user_b_id from pg_temp.classroom100_fixture), 'role', 'authenticated')::text, true);
 
-insert into classroom100_results
-select 'participant_b', 'own_group', count(*)::int, 1, count(*) = 1 from public.groups where id = (select group_b_id from classroom100_fixture);
-insert into classroom100_results
-select 'participant_b', 'other_group', count(*)::int, 0, count(*) = 0 from public.groups where id = (select group_a_id from classroom100_fixture);
-insert into classroom100_results
-select 'participant_b', 'own_story', count(*)::int, 1, count(*) = 1 from public.stories where id = (select story_b_id from classroom100_fixture);
-insert into classroom100_results
-select 'participant_b', 'other_story', count(*)::int, 0, count(*) = 0 from public.stories where id = (select story_a_id from classroom100_fixture);
-insert into classroom100_results
-select 'participant_b', 'own_segment', count(*)::int, 1, count(*) = 1 from public.segments where id = (select segment_b_id from classroom100_fixture);
-insert into classroom100_results
-select 'participant_b', 'other_segment', count(*)::int, 0, count(*) = 0 from public.segments where id = (select segment_a_id from classroom100_fixture);
-insert into classroom100_results
-select 'participant_b', 'own_round', count(*)::int, 1, count(*) = 1 from public.relay_rounds where id = (select round_b_id from classroom100_fixture);
-insert into classroom100_results
-select 'participant_b', 'other_round', count(*)::int, 0, count(*) = 0 from public.relay_rounds where id = (select round_a_id from classroom100_fixture);
+insert into pg_temp.classroom100_results
+select 'participant_b', 'own_group', count(*)::int, 1, count(*) = 1 from public.groups where id = (select group_b_id from pg_temp.classroom100_fixture);
+insert into pg_temp.classroom100_results
+select 'participant_b', 'other_group', count(*)::int, 0, count(*) = 0 from public.groups where id = (select group_a_id from pg_temp.classroom100_fixture);
+insert into pg_temp.classroom100_results
+select 'participant_b', 'own_story', count(*)::int, 1, count(*) = 1 from public.stories where id = (select story_b_id from pg_temp.classroom100_fixture);
+insert into pg_temp.classroom100_results
+select 'participant_b', 'other_story', count(*)::int, 0, count(*) = 0 from public.stories where id = (select story_a_id from pg_temp.classroom100_fixture);
+insert into pg_temp.classroom100_results
+select 'participant_b', 'own_segment', count(*)::int, 1, count(*) = 1 from public.segments where id = (select segment_b_id from pg_temp.classroom100_fixture);
+insert into pg_temp.classroom100_results
+select 'participant_b', 'other_segment', count(*)::int, 0, count(*) = 0 from public.segments where id = (select segment_a_id from pg_temp.classroom100_fixture);
+insert into pg_temp.classroom100_results
+select 'participant_b', 'own_round', count(*)::int, 1, count(*) = 1 from public.relay_rounds where id = (select round_b_id from pg_temp.classroom100_fixture);
+insert into pg_temp.classroom100_results
+select 'participant_b', 'other_round', count(*)::int, 0, count(*) = 0 from public.relay_rounds where id = (select round_a_id from pg_temp.classroom100_fixture);
 reset role;
 
 -- Participant A symmetric checks are valid only when A is distinct from host.
 do $$
 begin
-  if (select mode from classroom100_fixture) = 'THREE_ACCOUNT_SYMMETRIC' then
+  if (select mode from pg_temp.classroom100_fixture) = 'THREE_ACCOUNT_SYMMETRIC' then
     perform set_config('role', 'authenticated', true);
-    perform set_config('request.jwt.claim.sub', (select user_a_id::text from classroom100_fixture), true);
-    perform set_config('request.jwt.claims', jsonb_build_object('sub', (select user_a_id from classroom100_fixture), 'role', 'authenticated')::text, true);
+    perform set_config('request.jwt.claim.sub', (select user_a_id::text from pg_temp.classroom100_fixture), true);
+    perform set_config('request.jwt.claims', jsonb_build_object('sub', (select user_a_id from pg_temp.classroom100_fixture), 'role', 'authenticated')::text, true);
 
-    insert into classroom100_results
-    select 'participant_a', 'own_group', count(*)::int, 1, count(*) = 1 from public.groups where id = (select group_a_id from classroom100_fixture);
-    insert into classroom100_results
-    select 'participant_a', 'other_group', count(*)::int, 0, count(*) = 0 from public.groups where id = (select group_b_id from classroom100_fixture);
-    insert into classroom100_results
-    select 'participant_a', 'own_story', count(*)::int, 1, count(*) = 1 from public.stories where id = (select story_a_id from classroom100_fixture);
-    insert into classroom100_results
-    select 'participant_a', 'other_story', count(*)::int, 0, count(*) = 0 from public.stories where id = (select story_b_id from classroom100_fixture);
-    insert into classroom100_results
-    select 'participant_a', 'own_segment', count(*)::int, 1, count(*) = 1 from public.segments where id = (select segment_a_id from classroom100_fixture);
-    insert into classroom100_results
-    select 'participant_a', 'other_segment', count(*)::int, 0, count(*) = 0 from public.segments where id = (select segment_b_id from classroom100_fixture);
-    insert into classroom100_results
-    select 'participant_a', 'own_round', count(*)::int, 1, count(*) = 1 from public.relay_rounds where id = (select round_a_id from classroom100_fixture);
-    insert into classroom100_results
-    select 'participant_a', 'other_round', count(*)::int, 0, count(*) = 0 from public.relay_rounds where id = (select round_b_id from classroom100_fixture);
+    insert into pg_temp.classroom100_results
+    select 'participant_a', 'own_group', count(*)::int, 1, count(*) = 1 from public.groups where id = (select group_a_id from pg_temp.classroom100_fixture);
+    insert into pg_temp.classroom100_results
+    select 'participant_a', 'other_group', count(*)::int, 0, count(*) = 0 from public.groups where id = (select group_b_id from pg_temp.classroom100_fixture);
+    insert into pg_temp.classroom100_results
+    select 'participant_a', 'own_story', count(*)::int, 1, count(*) = 1 from public.stories where id = (select story_a_id from pg_temp.classroom100_fixture);
+    insert into pg_temp.classroom100_results
+    select 'participant_a', 'other_story', count(*)::int, 0, count(*) = 0 from public.stories where id = (select story_b_id from pg_temp.classroom100_fixture);
+    insert into pg_temp.classroom100_results
+    select 'participant_a', 'own_segment', count(*)::int, 1, count(*) = 1 from public.segments where id = (select segment_a_id from pg_temp.classroom100_fixture);
+    insert into pg_temp.classroom100_results
+    select 'participant_a', 'other_segment', count(*)::int, 0, count(*) = 0 from public.segments where id = (select segment_b_id from pg_temp.classroom100_fixture);
+    insert into pg_temp.classroom100_results
+    select 'participant_a', 'own_round', count(*)::int, 1, count(*) = 1 from public.relay_rounds where id = (select round_a_id from pg_temp.classroom100_fixture);
+    insert into pg_temp.classroom100_results
+    select 'participant_a', 'other_round', count(*)::int, 0, count(*) = 0 from public.relay_rounds where id = (select round_b_id from pg_temp.classroom100_fixture);
 
     perform set_config('role', 'none', true);
   end if;
@@ -188,24 +184,24 @@ $$;
 set local role anon;
 select set_config('request.jwt.claim.sub', '', true);
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
-insert into classroom100_results
-select 'anon', 'group_a_hidden', count(*)::int, 0, count(*) = 0 from public.groups where id = (select group_a_id from classroom100_fixture);
-insert into classroom100_results
-select 'anon', 'story_a_hidden', count(*)::int, 0, count(*) = 0 from public.stories where id = (select story_a_id from classroom100_fixture);
-insert into classroom100_results
-select 'anon', 'segment_a_hidden', count(*)::int, 0, count(*) = 0 from public.segments where id = (select segment_a_id from classroom100_fixture);
-insert into classroom100_results
-select 'anon', 'round_a_hidden', count(*)::int, 0, count(*) = 0 from public.relay_rounds where id = (select round_a_id from classroom100_fixture);
+insert into pg_temp.classroom100_results
+select 'anon', 'group_a_hidden', count(*)::int, 0, count(*) = 0 from public.groups where id = (select group_a_id from pg_temp.classroom100_fixture);
+insert into pg_temp.classroom100_results
+select 'anon', 'story_a_hidden', count(*)::int, 0, count(*) = 0 from public.stories where id = (select story_a_id from pg_temp.classroom100_fixture);
+insert into pg_temp.classroom100_results
+select 'anon', 'segment_a_hidden', count(*)::int, 0, count(*) = 0 from public.segments where id = (select segment_a_id from pg_temp.classroom100_fixture);
+insert into pg_temp.classroom100_results
+select 'anon', 'round_a_hidden', count(*)::int, 0, count(*) = 0 from public.relay_rounds where id = (select round_a_id from pg_temp.classroom100_fixture);
 reset role;
 
--- Evaluate before rollback. Raising an exception also rolls the transaction back.
+-- Evaluate before rollback.
 do $$
 declare
   v_failed text;
 begin
   select string_agg(role_name || ':' || check_name || ' observed=' || observed || ' expected=' || expected, '; ' order by role_name, check_name)
   into v_failed
-  from classroom100_results
+  from pg_temp.classroom100_results
   where not passed;
 
   if v_failed is not null then
@@ -215,10 +211,10 @@ end;
 $$;
 
 select
-  (select mode from classroom100_fixture) as test_mode,
+  (select mode from pg_temp.classroom100_fixture) as test_mode,
   'CLASSROOM_100 C1 cross-group RLS passed; fixture will now be rolled back' as result,
   count(*) as checks_passed
-from classroom100_results
+from pg_temp.classroom100_results
 where passed;
 
 rollback;
