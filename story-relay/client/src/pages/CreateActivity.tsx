@@ -107,63 +107,23 @@ export default function CreateActivity() {
   const handleEnter = async (activity: Activity) => {
     setEnteringId(activity.id);
     setError(null);
-    const { data: sessionData } = await supabase.auth.getSession();
-    const userId = sessionData.session?.user.id;
-    if (!userId) {
-      setError("找不到登入中的使用者。");
+
+    const { data: groupId, error: rpcError } = await supabase.rpc("join_activity_by_code", {
+      p_code: activity.code,
+    });
+
+    if (rpcError) {
+      setError(rpcError.message);
       setEnteringId(null);
       return;
     }
 
-    const { data: memberships, error: membershipError } = await supabase
-      .from("group_members")
-      .select("group_id")
-      .eq("user_id", userId)
-      .is("left_at", null);
-    if (membershipError) {
-      setError(membershipError.message);
+    if (!groupId || typeof groupId !== "string") {
+      setError("加入活動成功，但後端沒有回傳小組 ID。");
       setEnteringId(null);
       return;
     }
 
-    const joinedGroupIds = (memberships ?? []).map((row) => row.group_id as string);
-    let groupId: string | null = null;
-    if (joinedGroupIds.length > 0) {
-      const { data: joinedGroups, error: joinedGroupError } = await supabase
-        .from("groups")
-        .select("id")
-        .eq("activity_id", activity.id)
-        .in("id", joinedGroupIds)
-        .order("created_at", { ascending: true })
-        .limit(1);
-      if (joinedGroupError) {
-        setError(joinedGroupError.message);
-        setEnteringId(null);
-        return;
-      }
-      groupId = joinedGroups?.[0]?.id ?? null;
-    }
-
-    if (!groupId) {
-      const { data: groups, error: groupError } = await supabase
-        .from("groups")
-        .select("id")
-        .eq("activity_id", activity.id)
-        .order("created_at", { ascending: true })
-        .limit(1);
-      if (groupError) {
-        setError(groupError.message);
-        setEnteringId(null);
-        return;
-      }
-      groupId = groups?.[0]?.id ?? null;
-    }
-
-    if (!groupId) {
-      setError("這個活動目前沒有可進入的小組。");
-      setEnteringId(null);
-      return;
-    }
     window.location.hash = `/room/${groupId}`;
   };
 
@@ -273,7 +233,7 @@ export default function CreateActivity() {
                   </div>
 
                   <div className="mt-4 grid grid-cols-[1fr_auto_auto] gap-2">
-                    <button type="button" disabled={enteringId === activity.id} onClick={() => void handleEnter(activity)} className="flex items-center justify-center gap-2 rounded-lg bg-[#A64E3C] px-3 py-2 text-xs font-semibold text-white hover:bg-[#8F4033] disabled:opacity-60">{enteringId === activity.id ? <Loader2 size={14} className="animate-spin" /> : <DoorOpen size={14} />}進入活動</button>
+                    <button type="button" disabled={enteringId === activity.id || activity.status !== "active"} onClick={() => void handleEnter(activity)} className="flex items-center justify-center gap-2 rounded-lg bg-[#A64E3C] px-3 py-2 text-xs font-semibold text-white hover:bg-[#8F4033] disabled:opacity-60">{enteringId === activity.id ? <Loader2 size={14} className="animate-spin" /> : <DoorOpen size={14} />}加入活動</button>
                     <Link href={`/teacher/activity/${activity.id}`} className="flex items-center justify-center gap-2 rounded-lg border border-[#BFC8C1] px-3 py-2 text-xs font-semibold text-[#355447] hover:bg-[#EDF3EC]"><BarChart3 size={14} /><span className="hidden sm:inline">活動監控</span></Link>
                     <button type="button" onClick={() => setMenuId(menuId === activity.id ? null : activity.id)} className="flex items-center justify-center rounded-lg border border-[#D5CEC2] px-3 py-2 text-[#56645C] hover:bg-[#F3EEE5]" aria-label="更多操作"><MoreHorizontal size={17} /></button>
                   </div>
