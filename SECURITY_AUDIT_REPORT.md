@@ -3,13 +3,13 @@
 **審查目標：** `wu33000-design/collaborative-storytelling`
 **審查時間：** 2026-09-03
 **審查性質：** 防禦性靜態檢查，不包含滲透測試、帳號登入、資料庫破壞性操作或秘密值驗證。
-**目前 HEAD：** `2a3b100`（Story Relay 前端與 agent handoff）
+**審查基準 HEAD：** `2a3b100`（本報告初始審查基準）；CLASSROOM_100 後續修補尚在本地工作分支，待驗收後提交。
 
 ## 執行摘要
 
 目前沒有在公開檔案或完整 git 歷史掃描中發現明顯的 API key、OAuth Client Secret、Supabase service-role key、私鑰或 GitHub token。GitHub Pages workflow 也已設定最小化的 `contents: read`、`pages: write` 與 `id-token: write` 權限，這部分沒有發現明顯的過度授權。
 
-不過，檢查發現一項需要優先處理的相依套件風險，以及數項與 Supabase／資料庫 migration 有關的高影響設計風險。最重要的是，專案目前將 `axios@1.12.2` 作為直接依賴，但靜態搜尋沒有發現應用程式實際使用 Axios；`pnpm audit` 回報多項 Axios prototype-pollution、header injection、credential injection／request hijacking 與 denial-of-service 類別的高嚴重度 advisory。[1] 因此第一優先是移除未使用的 Axios，或將其升級到已修補版本並重新執行 audit。
+不過，檢查發現數項相依套件與 Supabase／資料庫 migration 有關的高影響設計風險。Axios 已在目前 package manifest 與 lockfile 中移除；後續重新 audit 仍回報 5 項 high，主要涉及直接使用的 `nanoid` 與由 Express／Recharts／Mermaid 引入的 transitive packages。`nanoid` 已升級至 5.1.16，但 `path-to-regexp`、`lodash` 與 `lodash-es` 的 advisory 仍需逐一評估相容升級或替換，不應用未驗證的全域 override 掩蓋結果。[1] [4]
 
 此外，數個 `SECURITY DEFINER` 函式使用 `set search_path = public`，而非更嚴格的空 search path；這會增加函式解析未限定名稱時的風險，尤其是未來有人新增同名物件或修改函式內容時。[2] 管理員 RPC 也依賴 `platform_admins` 表與 `auth.uid()`，必須持續確認只有可信 migration／伺服器流程能寫入管理員資料。
 
@@ -17,24 +17,24 @@
 
 | 編號 | 風險 | 等級 | 狀態 | 主要位置 |
 |---|---|---:|---|---|
-| R-01 | Axios 直接依賴存在已知高嚴重度 advisory，且目前似乎未被使用 | 高 | 待修補 | `story-relay/package.json`、`pnpm-lock.yaml` |
+| R-01 | production dependency audit 仍有 5 項 high advisory；nanoid 已修補，其餘為 transitive packages | 高 | 部分修補 | `story-relay/package.json`、`pnpm-lock.yaml` |
 | R-02 | 多個 `SECURITY DEFINER` 函式使用寬鬆的 `search_path = public` | 中 | 待加固 | `story-relay/supabase/migrations/*.sql` |
 | R-03 | 平台管理員權限屬於高影響資料面，需確認 bootstrap 與寫入邊界 | 高 | 需人工確認 | `platform_admins`、平台管理 RPC migrations |
 | R-04 | 公開活動代碼與公開頁面可能造成活動探索／內容暴露 | 中 | 設計風險 | `join_activity_by_code`、前端活動讀取流程 |
 | R-05 | Realtime 訂閱擴大了資料即時曝光面，必須依賴正確 RLS 與 publication 管理 | 中 | 需測試 | `20260903_enable_story_room_realtime.sql`、`StoryRoom.tsx` |
 | R-06 | 部分資料庫 migration 序列存在欄位／事件命名不一致跡象，可能造成安全政策失效或部署中斷 | 中 | 待驗證 | `activity_events`、`initial_text`、多個後續 migrations |
-| R-07 | 工作流使用 `pnpm install --no-frozen-lockfile`，建置不可重現性會削弱供應鏈控制 | 低至中 | 建議修補 | `.github/workflows/deploy-pages.yml:40` |
+| R-07 | workflow 已改用 frozen install，但 pnpm workspace 設定與部分 CI 依賴仍需確認 | 低至中 | 部分修補 | `.github/workflows/deploy-pages.yml:40`、`story-relay/pnpm-workspace.yaml` |
 | R-08 | 前端存在 `dangerouslySetInnerHTML`／`innerHTML`，目前內容看似靜態，但未來若混入使用者內容會變成 DOM XSS 入口 | 中 | 條件性風險 | `chart.tsx`、根目錄 `app.js` |
 
 ## 詳細發現
 
-### R-01：Axios 直接依賴與已知漏洞
+### R-01：production dependency audit 仍有 high advisory
 
-`story-relay/package.json` 宣告 `axios`，lockfile 解析到 `axios@1.12.2`；`pnpm audit` 回報多個高嚴重度 advisory，涉及 prototype pollution gadget、header injection、credential injection／request hijacking，以及透過 `__proto__` 造成的 denial of service。[1]
+Phase A 已確認應用程式沒有使用 Axios，並已從 `package.json` 與 lockfile 移除。`nanoid` 直接依賴已升級至 5.1.16；但目前 `pnpm audit --prod --audit-level high` 仍回報 5 項 high，包含 `path-to-regexp`、`lodash`、`lodash-es` 與 nanoid 的 advisory。這些結果必須按照實際 dependency tree 分別驗證，不能只看 advisory 數量。
 
-靜態搜尋 `client`、`server` 與 `shared` 沒有找到實際 Axios import 或呼叫。若此結果經人工確認為真，最安全且最簡單的修補是從 `package.json` 移除 Axios，再重新產生 lockfile 並執行 `pnpm audit`、`pnpm check` 與 build。若確實需要 Axios，則應升級到官方已修補版本，並禁止將未信任輸入傳入 headers、URL、merge config 或 redirect 設定。
+目前 `path-to-regexp@0.1.12` 由 Express 4.21.2 引入，`lodash@4.17.21` 由 Recharts 引入，`lodash-es@4.17.21` 由 Mermaid／Streamdown 引入。下一步應先確認是否存在可相容的上游升級；若沒有，評估替換未使用的功能或建立明確、經測試的 pnpm override。不要把 high advisory 標記為已解決，除非重新 audit、build 與功能測試均通過。
 
-**優先處理：高。** 這個風險不一定代表目前頁面已可被直接利用，因為目前似乎沒有使用 Axios；但保留未使用且有 advisory 的直接依賴會增加未來誤用與供應鏈風險。
+**優先處理：高。** 目前不代表每一項都可由外部未授權請求直接觸發，但 production dependency audit 尚未達到 CLASSROOM_100 Phase A 的零未處理 high acceptance criterion。
 
 ### R-02：SECURITY DEFINER 函式的 search_path 加固
 
@@ -122,6 +122,10 @@ Pages workflow 在 `story-relay` 目錄執行 `pnpm install --no-frozen-lockfile
 | Migration | 乾淨 staging project 可從頭到尾套用所有 migration，且欄位、函式與 policies 名稱一致。 |
 | XSS | 故事內容、活動名稱、提示與顯示名稱以文字方式渲染；惡意 HTML 不會執行。 |
 
+## 目前驗證紀錄
+
+截至 CLASSROOM_100 Phase A 實作後：`pnpm install --frozen-lockfile` 已成功；`pnpm check` 與 `pnpm build` 已成功；`pnpm audit --prod --audit-level high` 仍失敗並回報 5 項 high、共 43 項 vulnerability。此結果應在後續依賴修補後重新記錄，不可視為 Phase A 已完全通過。
+
 ## References
 
 [1] [GitHub Advisory Database：Axios advisories](https://github.com/advisories?query=axios)
@@ -129,3 +133,5 @@ Pages workflow 在 `story-relay` 目錄執行 `pnpm install --no-frozen-lockfile
 [2] [Supabase Database Functions：Security considerations](https://supabase.com/docs/guides/database/functions#security-definer-vs-invoker)
 
 [3] [Supabase Realtime：Postgres Changes](https://supabase.com/docs/guides/realtime/postgres-changes)
+
+[4] [pnpm 10 Settings：overrides](https://pnpm.io/10.x/settings#overrides)
