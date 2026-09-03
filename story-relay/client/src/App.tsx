@@ -12,6 +12,7 @@ import JoinActivity from "./pages/JoinActivity";
 import PlatformAdmin from "./pages/PlatformAdmin";
 import Start from "./pages/Start";
 import StoryRoom from "./pages/StoryRoom";
+import TeacherActivityDashboard from "./pages/TeacherActivityDashboard";
 
 function Router() {
   return (
@@ -20,6 +21,7 @@ function Router() {
         <Route path={"/"} component={Start} />
         <Route path={"/create"} component={CreateActivity} />
         <Route path={"/join"} component={JoinActivity} />
+        <Route path={"/teacher/activity/:activityId"} component={TeacherActivityDashboard} />
         <Route path={"/room/:groupId"} component={StoryRoom} />
         <Route path={"/admin"} component={PlatformAdmin} />
         <Route path={"/demo"} component={Home} />
