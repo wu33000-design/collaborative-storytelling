@@ -56,7 +56,7 @@ export default function TeacherActivityDashboard() {
     ]);
 
     if (activityResult.error || dashboardResult.error) {
-      setError(activityResult.error?.message || dashboardResult.error?.message || "讀取教師監控資料失敗。");
+      setError(activityResult.error?.message || dashboardResult.error?.message || "讀取主持人監控資料失敗。");
       setLoading(false);
       return;
     }
@@ -115,7 +115,7 @@ export default function TeacherActivityDashboard() {
     <div className="min-h-screen bg-[#F5F1E9] px-5 py-10 text-[#1F2E2A] sm:py-14">
       <main className="mx-auto max-w-6xl">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <Link href="/create" className="inline-flex items-center gap-2 text-sm text-[#68746B] hover:text-[#233B35]"><ArrowLeft size={16} />回到老師區</Link>
+          <Link href="/create" className="inline-flex items-center gap-2 text-sm text-[#68746B] hover:text-[#233B35]"><ArrowLeft size={16} />回到主持人區</Link>
           <button type="button" onClick={() => void loadDashboard()} className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-[#68746B] hover:bg-[#E9E3D8]"><RefreshCw size={14} />重新整理</button>
         </div>
 
@@ -131,16 +131,16 @@ export default function TeacherActivityDashboard() {
             <header className="mt-8 rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm sm:p-9">
               <div className="flex flex-wrap items-start justify-between gap-5">
                 <div>
-                  <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#A06B59]">教師活動監控 · {activity.code}</div>
+                  <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#A06B59]">主持人活動監控 · {activity.code}</div>
                   <h1 className="mt-3 font-serif text-4xl font-semibold tracking-[-0.045em] text-[#233B35] sm:text-5xl">{activityName(activity.name)}</h1>
-                  <p className="mt-4 text-sm leading-7 text-[#68746B]">即時查看所有小組的接力狀態。學生提交段落、換棒或故事完成後，此頁會自動更新。</p>
+                  <p className="mt-4 text-sm leading-7 text-[#68746B]">即時查看所有小組的接力狀態。參與者提交段落、換棒或故事完成後，此頁會自動更新。</p>
                 </div>
                 <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${activity.status === "active" ? "bg-[#E7EFE5] text-[#456348]" : "bg-[#ECE9E3] text-[#77776F]"}`}>{activity.status}</span>
               </div>
 
               <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-2xl bg-[#F3EEE5] p-4"><div className="text-xs text-[#7B827B]">小組</div><div className="mt-1 font-serif text-3xl font-semibold text-[#30463D]">{summary.groups}</div></div>
-                <div className="rounded-2xl bg-[#F3EEE5] p-4"><div className="text-xs text-[#7B827B]">目前學生</div><div className="mt-1 font-serif text-3xl font-semibold text-[#30463D]">{summary.members}</div></div>
+                <div className="rounded-2xl bg-[#F3EEE5] p-4"><div className="text-xs text-[#7B827B]">目前參與者</div><div className="mt-1 font-serif text-3xl font-semibold text-[#30463D]">{summary.members}</div></div>
                 <div className="rounded-2xl bg-[#F3EEE5] p-4"><div className="text-xs text-[#7B827B]">正在接力</div><div className="mt-1 font-serif text-3xl font-semibold text-[#30463D]">{summary.writing}</div></div>
                 <div className="rounded-2xl bg-[#F3EEE5] p-4"><div className="text-xs text-[#7B827B]">完成故事</div><div className="mt-1 font-serif text-3xl font-semibold text-[#30463D]">{summary.completed}</div></div>
               </div>
@@ -150,7 +150,7 @@ export default function TeacherActivityDashboard() {
               <div className="flex items-center gap-2"><Users size={19} className="text-[#355447]" /><h2 className="font-serif text-2xl font-semibold text-[#30463D]">小組進度</h2></div>
 
               {groups.length === 0 ? (
-                <div className="mt-5 rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-8 text-sm text-[#68746B] shadow-sm">目前還沒有小組資料。學生加入後會出現在這裡。</div>
+                <div className="mt-5 rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-8 text-sm text-[#68746B] shadow-sm">目前還沒有小組資料。參與者加入後會出現在這裡。</div>
               ) : (
                 <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                   {groups.map((group) => {
@@ -164,7 +164,7 @@ export default function TeacherActivityDashboard() {
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <div className="font-serif text-2xl font-semibold text-[#30463D]">{group.group_name}</div>
-                            <div className="mt-1 text-xs text-[#7B827B]">{group.member_count} 位學生</div>
+                            <div className="mt-1 text-xs text-[#7B827B]">{group.member_count} 位參與者</div>
                           </div>
                           <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${group.story_status === "completed" ? "bg-[#DDE9DE] text-[#355447]" : isActive ? "bg-[#F3E9D9] text-[#8B5E37]" : "bg-[#ECE9E3] text-[#77776F]"}`}>{group.story_status}</span>
                         </div>
