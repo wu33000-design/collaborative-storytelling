@@ -58,7 +58,7 @@ export default function JoinActivity() {
         <section className="rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm sm:p-10">
           <div className="mb-6 flex h-11 w-11 items-center justify-center rounded-full bg-[#E9E5DA] text-[#355447]"><KeyRound size={20} /></div>
           <h1 className="font-serif text-4xl font-semibold tracking-[-0.045em] text-[#233B35]">加入活動</h1>
-          <p className="mt-4 text-sm leading-7 text-[#68746B]">輸入老師提供的活動代碼。加入成功後會直接進入你的小組故事房間。</p>
+          <p className="mt-4 text-sm leading-7 text-[#68746B]">輸入主持人提供的活動代碼。加入成功後會直接進入你的小組故事房間。</p>
 
           <form className="mt-8" onSubmit={handleJoin}>
             <label htmlFor="activity-code" className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-[#69736B]">活動代碼</label>
