@@ -80,7 +80,8 @@ end;
 $$;
 
 -- 4) High-impact SECURITY DEFINER functions must have an explicit empty
--- search_path. Review any reported function before changing it in production.
+-- search_path. PostgreSQL may expose the empty string in pg_proc.proconfig as
+-- either search_path= or search_path="" depending on representation/version.
 do $$
 declare
   r record;
@@ -105,8 +106,9 @@ begin
   loop
     if r.proconfig is null
        or not exists (
-         select 1 from unnest(r.proconfig) x
-         where x = 'search_path='
+         select 1
+         from unnest(r.proconfig) x
+         where x in ('search_path=', 'search_path=""')
        ) then
       v_missing := array_append(v_missing, format('%s(%s)', r.proname, r.args));
     end if;
