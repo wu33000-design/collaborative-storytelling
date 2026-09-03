@@ -61,11 +61,16 @@
     box-shadow: -8px 0 14px rgba(58,66,53,.06);
   }
   #root table[class*="min-w-[1220px]"] td:last-child > div {
-    flex-wrap: nowrap;
+    display: grid;
+    grid-template-columns: 6.75rem 6.75rem;
+    justify-content: end;
+    gap: .5rem;
   }
   #root table[class*="min-w-[1220px]"] td:last-child a,
   #root table[class*="min-w-[1220px]"] td:last-child button {
-    flex-shrink: 0;
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
     white-space: nowrap;
     writing-mode: horizontal-tb;
   }
