@@ -1,10 +1,11 @@
-import { BookOpen, Loader2, RefreshCw, ShieldCheck, Users } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { BookOpen, Clock3, FileText, Layers3, Loader2, RefreshCw, ShieldCheck, Users } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useRoute } from "wouter";
 import { supabase } from "@/lib/supabase";
 
 type Segment = {
   id: string;
+  story_id: string;
   sequence_no: number;
   author_id: string | null;
   author_name: string | null;
@@ -16,6 +17,7 @@ type Segment = {
 
 type Round = {
   id: string;
+  story_id: string;
   round_no: number;
   current_writer_id: string;
   current_writer_name: string | null;
@@ -26,16 +28,16 @@ type Round = {
 
 type Story = {
   id: string;
+  group_id: string;
   title: string | null;
   prompt: string | null;
   status: string;
   required_segments: number | null;
   completed_at: string | null;
-  segments: Segment[];
-  rounds: Round[];
 };
 
 type Member = {
+  group_id: string;
   user_id: string;
   display_name: string | null;
   email: string | null;
@@ -44,13 +46,7 @@ type Member = {
   left_at: string | null;
 };
 
-type Group = {
-  id: string;
-  name: string;
-  created_at: string;
-  members: Member[];
-  stories: Story[];
-};
+type Group = { id: string; name: string; created_at: string };
 
 type ActivityContent = {
   activity: {
@@ -74,10 +70,14 @@ type ActivityContent = {
     host_email: string | null;
   };
   groups: Group[];
+  members: Member[];
+  stories: Story[];
+  segments: Segment[];
+  rounds: Round[];
 };
 
 const formatDate = (value: string | null) => (value ? new Date(value).toLocaleString() : "—");
-const statusLabel = (value: string) => value === "active" ? "進行中" : value === "closed" ? "已停止" : value;
+const statusLabel = (value: string) => value === "active" ? "進行中" : value === "closed" ? "已停止" : value === "completed" ? "已完成" : value;
 
 export default function PlatformActivityContent() {
   const [, params] = useRoute("/admin/activity/:activityId/content");
@@ -99,12 +99,60 @@ export default function PlatformActivityContent() {
       setError(rpcError.message);
       setContent(null);
     } else {
-      setContent(data as ActivityContent);
+      const snapshot = data as ActivityContent;
+      setContent({
+        ...snapshot,
+        groups: snapshot?.groups ?? [],
+        members: snapshot?.members ?? [],
+        stories: snapshot?.stories ?? [],
+        segments: snapshot?.segments ?? [],
+        rounds: snapshot?.rounds ?? [],
+      });
     }
     setLoading(false);
   }, [activityId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  const membersByGroup = useMemo(() => {
+    const map = new Map<string, Member[]>();
+    for (const member of content?.members ?? []) {
+      const rows = map.get(member.group_id) ?? [];
+      rows.push(member);
+      map.set(member.group_id, rows);
+    }
+    return map;
+  }, [content]);
+
+  const storiesByGroup = useMemo(() => {
+    const map = new Map<string, Story[]>();
+    for (const story of content?.stories ?? []) {
+      const rows = map.get(story.group_id) ?? [];
+      rows.push(story);
+      map.set(story.group_id, rows);
+    }
+    return map;
+  }, [content]);
+
+  const segmentsByStory = useMemo(() => {
+    const map = new Map<string, Segment[]>();
+    for (const segment of content?.segments ?? []) {
+      const rows = map.get(segment.story_id) ?? [];
+      rows.push(segment);
+      map.set(segment.story_id, rows);
+    }
+    return map;
+  }, [content]);
+
+  const roundsByStory = useMemo(() => {
+    const map = new Map<string, Round[]>();
+    for (const round of content?.rounds ?? []) {
+      const rows = map.get(round.story_id) ?? [];
+      rows.push(round);
+      map.set(round.story_id, rows);
+    }
+    return map;
+  }, [content]);
 
   return (
     <div className="min-h-screen bg-[#F5F1E9] px-5 py-10 text-[#1F2E2A] sm:py-14">
@@ -129,42 +177,59 @@ export default function PlatformActivityContent() {
               <div><div className="font-mono text-xs tracking-[0.08em] text-[#A06B59]">{content.activity.code}</div><h2 className="mt-2 font-serif text-3xl font-semibold">{content.activity.name || "未命名活動"}</h2></div>
               <div className="flex flex-wrap gap-2"><span className="rounded-full bg-[#E7EFE5] px-3 py-1 text-xs font-semibold text-[#456348]">{statusLabel(content.activity.status)}</span>{content.activity.deleted_at && <span className="rounded-full bg-[#F7E5DF] px-3 py-1 text-xs font-semibold text-[#8D4033]">回收桶</span>}</div>
             </div>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-2xl bg-[#F6F1E8] p-4"><div className="flex items-center gap-2 text-xs text-[#68746B]"><Users size={14}/>小組</div><div className="mt-2 font-serif text-2xl font-semibold">{content.groups.length}</div></div>
+              <div className="rounded-2xl bg-[#F6F1E8] p-4"><div className="flex items-center gap-2 text-xs text-[#68746B]"><BookOpen size={14}/>故事</div><div className="mt-2 font-serif text-2xl font-semibold">{content.stories.length}</div></div>
+              <div className="rounded-2xl bg-[#F6F1E8] p-4"><div className="flex items-center gap-2 text-xs text-[#68746B]"><FileText size={14}/>段落</div><div className="mt-2 font-serif text-2xl font-semibold">{content.segments.length}</div></div>
+              <div className="rounded-2xl bg-[#F6F1E8] p-4"><div className="flex items-center gap-2 text-xs text-[#68746B]"><Clock3 size={14}/>Round</div><div className="mt-2 font-serif text-2xl font-semibold">{content.rounds.length}</div></div>
+            </div>
+
             <div className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
               <div><div className="text-xs text-[#7C827B]">主持人</div><div className="mt-1 font-semibold">{content.activity.host_name || "未命名帳號"}</div><div className="font-mono text-[10px] text-[#7C827B]">{content.activity.host_email || "尚未同步 Email"}</div></div>
               <div><div className="text-xs text-[#7C827B]">建立時間</div><div className="mt-1">{formatDate(content.activity.created_at)}</div></div>
               <div><div className="text-xs text-[#7C827B]">截止時間</div><div className="mt-1">{formatDate(content.activity.deadline)}</div></div>
-              <div><div className="text-xs text-[#7C827B]">小組數</div><div className="mt-1">{content.groups.length}</div></div>
+              <div><div className="text-xs text-[#7C827B]">設定完成段落</div><div className="mt-1">{content.activity.required_segments ?? "不限"}</div></div>
             </div>
             {content.activity.prompt && <div className="mt-6 rounded-2xl bg-[#F6F1E8] p-5"><div className="text-xs font-semibold text-[#68746B]">故事提示</div><p className="mt-2 whitespace-pre-wrap leading-7">{content.activity.prompt}</p></div>}
             {content.activity.initial_text && <div className="mt-4 rounded-2xl bg-[#F6F1E8] p-5"><div className="text-xs font-semibold text-[#68746B]">Writer 0 初始文字</div><p className="mt-2 whitespace-pre-wrap leading-7">{content.activity.initial_text}</p></div>}
           </section>
 
           <section className="mt-6 space-y-5">
-            {content.groups.length === 0 && <div className="rounded-2xl bg-[#FFFDF8] p-6 text-sm text-[#68746B]">這個活動目前沒有小組。</div>}
-            {content.groups.map((group) => <article key={group.id} className="rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-6 shadow-sm sm:p-8">
-              <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><Users size={18}/><h3 className="font-serif text-2xl font-semibold">{group.name}</h3></div><div className="text-xs text-[#7C827B]">{group.members.filter(member => !member.left_at).length} 位目前成員</div></div>
+            {content.groups.length === 0 && <div className="rounded-2xl bg-[#FFFDF8] p-6 text-sm text-[#68746B]">後端快照顯示這個活動目前沒有小組。</div>}
+            {content.groups.map(group => {
+              const groupMembers = membersByGroup.get(group.id) ?? [];
+              const groupStories = storiesByGroup.get(group.id) ?? [];
+              return <article key={group.id} className="rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-6 shadow-sm sm:p-8">
+                <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><Layers3 size={18}/><h3 className="font-serif text-2xl font-semibold">{group.name}</h3></div><div className="text-xs text-[#7C827B]">{groupMembers.filter(member => !member.left_at).length} 位目前成員 · {groupStories.length} 個故事</div></div>
 
-              <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {group.members.map(member => <div key={`${group.id}-${member.user_id}-${member.joined_at}`} className="rounded-xl bg-[#F6F1E8] p-3 text-sm"><div className="font-semibold">{member.display_name || "未命名成員"}{member.left_at ? "（已離開）" : ""}</div><div className="mt-1 font-mono text-[10px] text-[#7C827B]">{member.email || member.user_id}</div></div>)}
-              </div>
+                <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {groupMembers.map(member => <div key={`${group.id}-${member.user_id}-${member.joined_at}`} className="rounded-xl bg-[#F6F1E8] p-3 text-sm"><div className="font-semibold">{member.display_name || "未命名成員"}{member.left_at ? "（已離開）" : ""}</div><div className="mt-1 font-mono text-[10px] text-[#7C827B]">{member.email || member.user_id}</div></div>)}
+                </div>
 
-              <div className="mt-6 space-y-5">
-                {group.stories.map(story => <section key={story.id} className="rounded-2xl border border-[#E3DDD2] p-5">
-                  <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><BookOpen size={17}/><h4 className="font-serif text-xl font-semibold">{story.title || "未命名故事"}</h4></div><div className="text-xs text-[#68746B]">{statusLabel(story.status)} · {story.segments.length} 段</div></div>
-                  {story.prompt && story.prompt !== content.activity.prompt && <p className="mt-4 whitespace-pre-wrap rounded-xl bg-[#F6F1E8] p-4 text-sm leading-7">{story.prompt}</p>}
+                <div className="mt-6 space-y-5">
+                  {groupStories.length === 0 && <div className="rounded-xl bg-[#F6F1E8] p-4 text-sm text-[#7C827B]">這個小組目前沒有故事資料。</div>}
+                  {groupStories.map(story => {
+                    const storySegments = segmentsByStory.get(story.id) ?? [];
+                    const storyRounds = roundsByStory.get(story.id) ?? [];
+                    return <section key={story.id} className="rounded-2xl border border-[#E3DDD2] p-5">
+                      <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><BookOpen size={17}/><h4 className="font-serif text-xl font-semibold">{story.title || "未命名故事"}</h4></div><div className="text-xs text-[#68746B]">{statusLabel(story.status)} · {storySegments.length} 段 · {storyRounds.length} Round</div></div>
+                      {story.prompt && story.prompt !== content.activity.prompt && <p className="mt-4 whitespace-pre-wrap rounded-xl bg-[#F6F1E8] p-4 text-sm leading-7">{story.prompt}</p>}
 
-                  <div className="mt-5 space-y-3">
-                    {story.segments.length === 0 && <div className="text-sm text-[#7C827B]">尚無故事內容。</div>}
-                    {story.segments.map(segment => <div key={segment.id} className="rounded-xl bg-[#FAF7F1] p-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#7C827B]"><span>#{segment.sequence_no} · {segment.author_id ? (segment.author_name || segment.author_email || "未命名作者") : "Writer 0"}</span><span>{formatDate(segment.submitted_at)}</span></div>
-                      <p className="mt-3 whitespace-pre-wrap leading-7">{segment.content}</p>
-                    </div>)}
-                  </div>
+                      <div className="mt-5 space-y-3">
+                        {storySegments.length === 0 && <div className="text-sm text-[#7C827B]">這個故事目前沒有段落資料。</div>}
+                        {storySegments.map(segment => <div key={segment.id} className="rounded-xl bg-[#FAF7F1] p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#7C827B]"><span>#{segment.sequence_no} · {segment.author_id ? (segment.author_name || segment.author_email || "未命名作者") : "Writer 0"}</span><span>{formatDate(segment.submitted_at)}</span></div>
+                          <p className="mt-3 whitespace-pre-wrap leading-7">{segment.content}</p>
+                        </div>)}
+                      </div>
 
-                  {story.rounds.length > 0 && <details className="mt-5 rounded-xl border border-[#E3DDD2] p-4"><summary className="cursor-pointer text-sm font-semibold">接力輪次紀錄（{story.rounds.length}）</summary><div className="mt-3 space-y-2">{story.rounds.map(round => <div key={round.id} className="flex flex-wrap justify-between gap-2 rounded-lg bg-[#F6F1E8] px-3 py-2 text-xs"><span>Round {round.round_no} · {round.current_writer_name || round.current_writer_id}</span><span>{round.status} · {formatDate(round.started_at)}</span></div>)}</div></details>}
-                </section>)}
-              </div>
-            </article>)}
+                      {storyRounds.length > 0 && <details className="mt-5 rounded-xl border border-[#E3DDD2] p-4"><summary className="cursor-pointer text-sm font-semibold">接力輪次紀錄（{storyRounds.length}）</summary><div className="mt-3 space-y-2">{storyRounds.map(round => <div key={round.id} className="flex flex-wrap justify-between gap-2 rounded-lg bg-[#F6F1E8] px-3 py-2 text-xs"><span>Round {round.round_no} · {round.current_writer_name || round.current_writer_id}</span><span>{statusLabel(round.status)} · {formatDate(round.started_at)}</span></div>)}</div></details>}
+                    </section>;
+                  })}
+                </div>
+              </article>;
+            })}
           </section>
         </>}
       </main>
