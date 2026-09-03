@@ -24,9 +24,9 @@
 
 資安報告指出，目前沒有在 tracked files 或 git 歷史中發現常見 GitHub token、Google API key、Supabase service-role key、OAuth secret 或私鑰；這不是對外部 CI secrets 或 Supabase Dashboard secrets 的保證，仍需保留人工檢查。
 
-### P0：production dependency audit 尚未清零
+### P0：production dependency audit
 
-Axios 已確認未被應用程式使用，並已從 `story-relay/package.json` 與 lockfile 移除。`nanoid` 直接依賴已升級至 5.1.16；目前 `pnpm audit --prod --audit-level high` 仍回報 high advisory，主要涉及 Express 的 `path-to-regexp@0.1.12`、Recharts 的 `lodash@4.17.21`、Streamdown／Mermaid 的 `lodash-es@4.17.21`。請先逐一確認 dependency tree、可相容的上游修補與實際可達性；不要用未經測試的 override 讓 audit 表面通過。
+Axios 已確認未被應用程式使用，並已從 `story-relay/package.json` 與 lockfile 移除；nanoid 已升級至 5.1.16。Express 已升級至 5.2.1、Recharts 至 3.10.1、Streamdown 至 2.6.0，且已修正 Express 5 fallback 路由與 Recharts 3 chart adapter 型別。`pnpm audit --prod --audit-level high` 現在為 0 high、0 critical，剩餘 1 moderate 與 5 low；後續仍需持續追蹤，不可宣稱風險為零。
 
 ### P1：高權限資料庫函式
 
@@ -68,11 +68,11 @@ set search_path = ''
 
 ### P2：CI／供應鏈
 
-`.github/workflows/deploy-pages.yml` 已改為 `pnpm install --frozen-lockfile`，Node／pnpm 版本已固定；`pnpm check` 與 `pnpm build` 已通過。`pnpm audit --prod --audit-level high` 仍失敗，請在不降低 RLS 或刪除安全檢查的前提下處理剩餘 transitive advisory。若使用 `pnpm-workspace.yaml` 的 overrides，必須以實際 lockfile、audit 與 build 驗證其生效，不得只依賴設定檔文字。
+`.github/workflows/deploy-pages.yml` 已改為 `pnpm install --frozen-lockfile`，Node／pnpm 版本已固定；`pnpm check` 與 `pnpm build` 已通過。`pnpm audit --prod --audit-level high` 已無 high／critical，仍需追蹤剩餘 moderate／low advisory。若使用 `pnpm-workspace.yaml` 的 overrides，必須以實際 lockfile、audit 與 build 驗證其生效，不得只依賴設定檔文字。
 
 ## CLASSROOM_100 最新進度
 
-Phase A 已完成部分修補：Axios 已移除、nanoid 已升級至 5.1.16、workflow 已改用 frozen lockfile、`pnpm install --frozen-lockfile`／`pnpm check`／`pnpm build` 已通過；production audit 仍有 5 項 high，因此 Phase A 尚未完全驗收。
+Phase A 已完成：Axios 已移除、nanoid 已升級至 5.1.16、Express／Recharts／Streamdown 已升級、workflow 已改用 frozen lockfile、`pnpm install --frozen-lockfile`／`pnpm check`／`pnpm build` 已通過；production audit 已無 high／critical，剩餘 1 moderate 與 5 low。
 
 Phase B 已新增 `story-relay/supabase/migrations/20260903_classroom100_security_hardening.sql`，提供 admin audit log、受控唯讀 audit RPC、activity／platform admin trigger，並只對指定高權限 SECURITY DEFINER 函式設定空 search_path。此 migration 尚未套用至實際 Supabase project，必須先在 staging 逐一驗證函式簽名、trigger actor、RLS 與現有 migration 順序。
 
@@ -80,7 +80,7 @@ Phase B 已新增 `story-relay/supabase/migrations/20260903_classroom100_securit
 
 1. 先閱讀 `SECURITY_AUDIT_REPORT.md`、`package.json`、`pnpm-lock.yaml`、所有 Supabase migrations 與 `StoryRoom.tsx`。
 2. 建立不含秘密值的檢查紀錄，重新執行 dependency、secret filename／pattern、workflow、RLS 與 migration 靜態檢查。
-3. 先處理剩餘 production dependency high advisory，確認是否能以相容升級或移除未使用功能修補。
+3. 維持 production dependency audit 的 0 high／0 critical 基線，定期檢查剩餘 moderate／low advisory 與相容升級。
 4. 在 staging 套用並驗證 `20260903_classroom100_security_hardening.sql`，再確認 `SECURITY DEFINER`、platform admin 與 migration 欄位一致性。
 5. 執行雙帳號／匿名 RLS 與 Realtime 測試，再進行 XSS 輸入測試。
 6. 每個修補以小而可回滾的 commit 完成；不要把無關 UI 重構混入安全修補。
@@ -90,7 +90,7 @@ Phase B 已新增 `story-relay/supabase/migrations/20260903_classroom100_securit
 
 | 項目 | 通過條件 |
 |---|---|
-| 相依套件 | Axios 已移除；nanoid 已修補；剩餘 production high advisory 必須逐項修補、證明不可達，或明確記錄為未完成。 |
+| 相依套件 | Axios 已移除；nanoid、Express、Recharts、Streamdown 已更新；production audit 維持 0 high／0 critical，剩餘 moderate／low 需持續追蹤。 |
 | CI | 乾淨 runner 可使用 `pnpm install --frozen-lockfile` 完成安裝與 build。 |
 | 秘密 | repository 與 git 歷史沒有新增秘密；報告與 log 不顯示秘密值。 |
 | RLS | anon 無法讀取業務資料；學生無法跨組讀取；教師／管理員只可執行授權範圍內操作。 |

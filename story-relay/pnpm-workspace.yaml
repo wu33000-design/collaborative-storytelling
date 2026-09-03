@@ -6,4 +6,3 @@ patchedDependencies:
 
 overrides:
   'tailwindcss>nanoid': '3.3.7'
-  'express@4.21.2>path-to-regexp': '0.1.13'
