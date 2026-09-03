@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { ArrowLeft, BarChart3, CheckCircle2, Copy, Loader2, OctagonX, Pencil, PlusCircle, RefreshCw, Trash2, X } from "lucide-react";
+import { ArrowLeft, BarChart3, CheckCircle2, Copy, DoorOpen, Loader2, OctagonX, Pencil, PlusCircle, RefreshCw, Trash2, X } from "lucide-react";
 import { Link } from "wouter";
 import { supabase } from "@/lib/supabase";
 
@@ -40,6 +40,7 @@ export default function CreateActivity() {
   const [error, setError] = useState<string | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(true);
+  const [enteringId, setEnteringId] = useState<string | null>(null);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -61,6 +62,7 @@ export default function CreateActivity() {
       .from("activities")
       .select("id, code, name, status, created_at")
       .eq("teacher_id", userId)
+      .is("deleted_at", null)
       .order("created_at", { ascending: false });
 
     if (queryError) setError(queryError.message);
@@ -112,6 +114,75 @@ export default function CreateActivity() {
     setCreated(data as CreateResult);
     setCreating(false);
     await loadActivities();
+  };
+
+  const handleEnter = async (activity: Activity) => {
+    setEnteringId(activity.id);
+    setError(null);
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const userId = sessionData.session?.user.id;
+    if (!userId) {
+      setError("找不到登入中的使用者。");
+      setEnteringId(null);
+      return;
+    }
+
+    const { data: memberships, error: membershipError } = await supabase
+      .from("group_members")
+      .select("group_id")
+      .eq("user_id", userId)
+      .is("left_at", null);
+
+    if (membershipError) {
+      setError(membershipError.message);
+      setEnteringId(null);
+      return;
+    }
+
+    const joinedGroupIds = (memberships ?? []).map((row) => row.group_id as string);
+    let groupId: string | null = null;
+
+    if (joinedGroupIds.length > 0) {
+      const { data: joinedGroups, error: joinedGroupError } = await supabase
+        .from("groups")
+        .select("id")
+        .eq("activity_id", activity.id)
+        .in("id", joinedGroupIds)
+        .order("created_at", { ascending: true })
+        .limit(1);
+
+      if (joinedGroupError) {
+        setError(joinedGroupError.message);
+        setEnteringId(null);
+        return;
+      }
+      groupId = joinedGroups?.[0]?.id ?? null;
+    }
+
+    if (!groupId) {
+      const { data: groups, error: groupError } = await supabase
+        .from("groups")
+        .select("id")
+        .eq("activity_id", activity.id)
+        .order("created_at", { ascending: true })
+        .limit(1);
+
+      if (groupError) {
+        setError(groupError.message);
+        setEnteringId(null);
+        return;
+      }
+      groupId = groups?.[0]?.id ?? null;
+    }
+
+    if (!groupId) {
+      setError("這個活動目前沒有可進入的小組。");
+      setEnteringId(null);
+      return;
+    }
+
+    window.location.hash = `/room/${groupId}`;
   };
 
   const handleStop = async (activityId: string) => {
@@ -208,7 +279,7 @@ export default function CreateActivity() {
 
           <aside className="rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm sm:p-8 lg:sticky lg:top-8 lg:self-start">
             <div className="flex items-center justify-between"><div><div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#A06B59]">情境式主持人身分</div><h2 className="mt-2 font-serif text-3xl font-semibold tracking-[-0.04em] text-[#233B35]">我的活動</h2></div><button type="button" onClick={() => void loadActivities()} className="rounded-full p-2 text-[#68746B] hover:bg-[#EEE8DE]" aria-label="重新整理"><RefreshCw size={17} /></button></div>
-            <p className="mt-3 text-sm leading-6 text-[#68746B]">每個帳號最多主持 3 個未刪除活動，包含停止中的活動。你可以停止或刪除自己主持的活動；刪除後只有平台管理者能在 30 天內恢復。</p>
+            <p className="mt-3 text-sm leading-6 text-[#68746B]">每個帳號最多主持 3 個未刪除活動，包含停止中的活動。你可以直接進入、監控、停止或刪除自己主持的活動；刪除後只有平台管理者能在 30 天內恢復。</p>
 
             <div className="mt-6 space-y-3">
               {loadingActivities && <div className="flex items-center gap-2 text-sm text-[#68746B]"><Loader2 size={16} className="animate-spin" />載入中…</div>}
@@ -217,7 +288,8 @@ export default function CreateActivity() {
                 <div key={activity.id} className="rounded-2xl border border-[#DED8CC] p-4">
                   <div className="flex items-start justify-between gap-3"><div><div className="font-semibold text-[#30463D]">{activity.name || "未命名活動"}</div><div className="mt-1 font-mono text-xs tracking-[0.08em] text-[#A06B59]">{activity.code}</div></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${activity.status === "active" ? "bg-[#E7EFE5] text-[#456348]" : "bg-[#ECE9E3] text-[#77776F]"}`}>{activity.status}</span></div>
 
-                  <Link href={`/teacher/activity/${activity.id}`} className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[#233B35] px-3 py-2 text-xs font-semibold text-[#FFFDF8] transition hover:bg-[#304D44]"><BarChart3 size={14} />活動監控</Link>
+                  <button type="button" disabled={enteringId === activity.id} onClick={() => void handleEnter(activity)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[#A64E3C] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#8F4033] disabled:opacity-60">{enteringId === activity.id ? <Loader2 size={14} className="animate-spin" /> : <DoorOpen size={14} />}進入活動</button>
+                  <Link href={`/teacher/activity/${activity.id}`} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-[#233B35] px-3 py-2 text-xs font-semibold text-[#FFFDF8] transition hover:bg-[#304D44]"><BarChart3 size={14} />活動監控</Link>
 
                   {renamingId === activity.id ? (
                     <div className="mt-2 rounded-xl bg-[#F3EEE5] p-3">
