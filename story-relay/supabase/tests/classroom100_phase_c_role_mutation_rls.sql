@@ -7,7 +7,8 @@
 --   3. An ordinary participant cannot directly mutate writer_states,
 --      relay_rounds, segments, or platform_admins.
 --
--- Safety: all fixtures are created inside this transaction and rolled back.
+-- Safety: all fixtures and any temporary platform-admin demotion are created
+-- inside this transaction and rolled back.
 
 begin;
 
@@ -16,6 +17,7 @@ declare
   v_host uuid;
   v_participant uuid;
   v_admin uuid;
+  v_host_was_admin boolean := false;
 
   v_activity uuid := gen_random_uuid();
   v_group uuid := gen_random_uuid();
@@ -29,40 +31,36 @@ declare
   v_checks integer := 0;
   v_threw boolean;
 begin
-  -- Need one platform admin and one ordinary account. Prefer a non-admin host and
-  -- a different non-admin participant when available; with only two accounts the
-  -- same ordinary account may serve as host + participant.
+  -- Pick one existing platform admin for the admin role.
   select pa.user_id
   into v_admin
   from public.platform_admins pa
+  join public.profiles p on p.id = pa.user_id
   order by pa.created_at, pa.user_id
   limit 1;
 
+  -- Pick a DIFFERENT profile for the host/participant role. It may currently
+  -- also be a platform admin; if so, temporarily demote it inside this rollback-
+  -- only transaction so participant checks exercise a genuinely ordinary role.
   select p.id
   into v_host
   from public.profiles p
-  where not exists (
-    select 1 from public.platform_admins pa where pa.user_id = p.id
-  )
-  order by p.id
-  limit 1;
-
-  select p.id
-  into v_participant
-  from public.profiles p
-  where not exists (
-    select 1 from public.platform_admins pa where pa.user_id = p.id
-  )
-    and p.id <> v_host
+  where p.id <> v_admin
   order by p.id
   limit 1;
 
   if v_admin is null or v_host is null then
-    raise exception 'C1 role/mutation fixture requires at least one platform admin and one non-admin profile. No data was changed.';
+    raise exception 'C1 role/mutation fixture requires at least two profile-backed accounts, including one platform admin. No data was changed.';
   end if;
 
-  if v_participant is null then
-    v_participant := v_host;
+  v_participant := v_host;
+
+  select exists (
+    select 1 from public.platform_admins pa where pa.user_id = v_host
+  ) into v_host_was_admin;
+
+  if v_host_was_admin then
+    delete from public.platform_admins where user_id = v_host;
   end if;
 
   -- SQL Editor owner creates a valid rollback-only fixture.
@@ -144,6 +142,13 @@ begin
   perform set_config('role', 'authenticated', true);
   perform set_config('request.jwt.claim.sub', v_participant::text, true);
   perform set_config('request.jwt.claims', jsonb_build_object('sub', v_participant, 'role', 'authenticated')::text, true);
+
+  -- Sanity check: participant must not be a platform admin during this phase.
+  select count(*) into v_rows from public.platform_admins where user_id = v_participant;
+  v_checks := v_checks + 1;
+  if v_rows <> 0 then
+    v_failed := concat_ws('; ', v_failed, 'participant remained platform admin during ordinary-role checks');
+  end if;
 
   -- writer_states UPDATE must affect zero rows or raise.
   v_rows := 0;
@@ -338,7 +343,8 @@ begin
     raise exception 'CLASSROOM_100 C1 role/mutation RLS failed: %', v_failed;
   end if;
 
-  raise notice 'CLASSROOM_100 C1 role/mutation RLS passed | checks=% | fixture will be rolled back', v_checks;
+  raise notice 'CLASSROOM_100 C1 role/mutation RLS passed | checks=% | host_was_temporarily_demoted=% | fixture will be rolled back',
+    v_checks, v_host_was_admin;
 end;
 $$;
 
