@@ -12,7 +12,6 @@ import PlatformActivityContent from "./pages/PlatformActivityContent";
 import PlatformActivityContentIndex from "./pages/PlatformActivityContentIndex";
 import PlatformActivityDeletion from "./pages/PlatformActivityDeletion";
 import PlatformAdminShell from "./pages/PlatformAdminShell";
-import RealtimeIsolationProbe from "./pages/RealtimeIsolationProbe";
 import Start from "./pages/Start";
 import StoryRoom from "./pages/StoryRoom";
 import TeacherActivityDashboard from "./pages/TeacherActivityDashboard";
@@ -33,7 +32,6 @@ function Router() {
         <Route path={"/admin/activity/:activityId/content"} component={PlatformActivityContent} />
         <Route path={"/admin/activity-delete"} component={PlatformActivityDeletion} />
         <Route path={"/admin"} component={PlatformAdminShell} />
-        <Route path={"/test/realtime-isolation"} component={RealtimeIsolationProbe} />
         <Route path={"/demo"} component={Home} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
