@@ -11,6 +11,7 @@ type Activity = {
   status: string;
   min_words: number | null;
   max_words: number | null;
+  time_limit_seconds: number | null;
   deadline: string | null;
   closed_reason: string | null;
 };
@@ -20,7 +21,7 @@ type Segment = { id: string; sequence_no: number; author_id: string | null; cont
 type Member = { user_id: string; role: string; joined_at: string };
 type Profile = { id: string; display_name: string; avatar_url: string | null };
 type NameHistory = { id: string; old_name: string | null; new_name: string | null; changed_at: string };
-type RelayRound = { id: string; round_no: number; current_writer_id: string; status: string };
+type RelayRound = { id: string; round_no: number; current_writer_id: string; status: string; started_at: string };
 type Nomination = { candidate_id: string };
 type Volunteer = { user_id: string };
 
@@ -56,7 +57,7 @@ export default function StoryRoom() {
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [intentBusy, setIntentBusy] = useState<string | null>(null);
-  const [deadlineRemainingSeconds, setDeadlineRemainingSeconds] = useState<number | null>(null);
+  const [roundRemainingSeconds, setRoundRemainingSeconds] = useState<number | null>(null);
 
   const profileMap = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
   const nominatedIds = useMemo(() => new Set(nominations.map((item) => item.candidate_id)), [nominations]);
@@ -98,7 +99,7 @@ export default function StoryRoom() {
     }
 
     const [activityResult, storyResult, memberResult, historyResult] = await Promise.all([
-      supabase.from("activities").select("id, code, name, prompt, status, min_words, max_words, deadline, closed_reason").eq("id", loadedGroup.activity_id).maybeSingle(),
+      supabase.from("activities").select("id, code, name, prompt, status, min_words, max_words, time_limit_seconds, deadline, closed_reason").eq("id", loadedGroup.activity_id).maybeSingle(),
       supabase.from("stories").select("id, title, prompt, status").eq("group_id", loadedGroup.id).maybeSingle(),
       supabase.from("group_members").select("user_id, role, joined_at").eq("group_id", loadedGroup.id).is("left_at", null).order("joined_at"),
       supabase.from("activity_name_history").select("id, old_name, new_name, changed_at").eq("activity_id", loadedGroup.activity_id).order("changed_at", { ascending: true }),
@@ -131,7 +132,7 @@ export default function StoryRoom() {
       loadedMembers.length > 0
         ? supabase.from("profiles").select("id, display_name, avatar_url").in("id", loadedMembers.map((member) => member.user_id))
         : Promise.resolve({ data: [], error: null }),
-      supabase.from("relay_rounds").select("id, round_no, current_writer_id, status").eq("story_id", loadedStory.id).in("status", ["open", "writing"]).order("round_no", { ascending: false }).limit(1).maybeSingle(),
+      supabase.from("relay_rounds").select("id, round_no, current_writer_id, status, started_at").eq("story_id", loadedStory.id).in("status", ["open", "writing"]).order("round_no", { ascending: false }).limit(1).maybeSingle(),
     ]);
 
     if (segmentResult.error || profileResult.error || roundResult.error) {
@@ -168,46 +169,48 @@ export default function StoryRoom() {
   }, [loadRoom]);
 
   useEffect(() => {
-    if (!activity?.id || activity.status !== "active" || !activity.deadline) {
-      setDeadlineRemainingSeconds(null);
-      return;
-    }
-
+    if (!activity?.id || activity.status !== "active" || !activity.deadline) return;
     const deadlineMs = Date.parse(activity.deadline);
-    if (!Number.isFinite(deadlineMs)) {
-      setDeadlineRemainingSeconds(null);
+    if (!Number.isFinite(deadlineMs)) return;
+
+    let timer: number | undefined;
+    const finalize = async () => {
+      const { error: deadlineError } = await supabase.rpc("finalize_activity_deadline", { p_activity_id: activity.id });
+      if (deadlineError) setError(deadlineError.message);
+      else await loadRoom(true);
+    };
+
+    const remaining = deadlineMs - Date.now();
+    if (remaining <= 0) {
+      void finalize();
       return;
     }
 
-    let finalizing = false;
-    let interval: number | undefined;
-
-    const finalize = async () => {
-      if (finalizing) return;
-      finalizing = true;
-      if (interval !== undefined) window.clearInterval(interval);
-      const { error: deadlineError } = await supabase.rpc("finalize_activity_deadline", { p_activity_id: activity.id });
-      if (deadlineError) {
-        setError(deadlineError.message);
-        finalizing = false;
-      } else {
-        await loadRoom(true);
-      }
-    };
-
-    const tick = () => {
-      const remainingMs = deadlineMs - Date.now();
-      const remainingSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
-      setDeadlineRemainingSeconds(remainingSeconds);
-      if (remainingMs <= 0) void finalize();
-    };
-
-    tick();
-    interval = window.setInterval(tick, 1000);
+    timer = window.setTimeout(() => void finalize(), Math.min(remaining + 50, 2_147_000_000));
     return () => {
-      if (interval !== undefined) window.clearInterval(interval);
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [activity?.deadline, activity?.id, activity?.status, loadRoom]);
+
+  useEffect(() => {
+    const limitSeconds = activity?.time_limit_seconds;
+    if (!round || story?.status !== "active" || !limitSeconds || limitSeconds <= 0) {
+      setRoundRemainingSeconds(null);
+      return;
+    }
+
+    const startedMs = Date.parse(round.started_at);
+    if (!Number.isFinite(startedMs)) {
+      setRoundRemainingSeconds(null);
+      return;
+    }
+
+    const endsAt = startedMs + limitSeconds * 1000;
+    const tick = () => setRoundRemainingSeconds(Math.max(0, Math.ceil((endsAt - Date.now()) / 1000)));
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [activity?.time_limit_seconds, round, story?.status]);
 
   useEffect(() => {
     if (!groupId || !group || !activity || !story) return;
@@ -300,13 +303,14 @@ export default function StoryRoom() {
   const belowMinimum = activity?.min_words != null && draftLength < activity.min_words;
   const aboveMaximum = activity?.max_words != null && draftLength > activity.max_words;
   const deadlineClosed = activity?.closed_reason === "deadline";
-  const deadlineImminent = deadlineRemainingSeconds != null && deadlineRemainingSeconds <= 60;
+  const roundTimeExpired = roundRemainingSeconds === 0;
+  const roundTimeImminent = roundRemainingSeconds != null && roundRemainingSeconds > 0 && roundRemainingSeconds <= 60;
 
   return (
     <div className="min-h-screen bg-[#F5F1E9] px-5 py-10 text-[#1F2E2A] sm:py-14">
       <main className="mx-auto max-w-5xl">
         <div className="flex items-center justify-between gap-4">
-          <Link href="/join" className="text-sm text-[#68746B] hover:text-[#233B35]">← 回到加入活動</Link>
+          <Link href="/" className="text-sm text-[#68746B] hover:text-[#233B35]">← 回到入口</Link>
           <button type="button" onClick={() => void loadRoom()} className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-[#68746B] hover:bg-[#E9E3D8]"><RefreshCw size={14} />重新整理</button>
         </div>
 
@@ -376,11 +380,11 @@ export default function StoryRoom() {
                   <section className="rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm sm:p-8">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center gap-2"><PenLine size={19} className="text-[#A64E3C]" /><h2 className="font-serif text-2xl font-semibold">下一段</h2></div>
-                      {deadlineRemainingSeconds != null && (
-                        <div className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 ${deadlineImminent ? "bg-[#F7E5DF] text-[#8D4033]" : "bg-[#EDF3EC] text-[#355447]"}`}>
+                      {roundRemainingSeconds != null && (
+                        <div className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 ${roundTimeExpired || roundTimeImminent ? "bg-[#F7E5DF] text-[#8D4033]" : "bg-[#EDF3EC] text-[#355447]"}`}>
                           <Clock3 size={15} />
-                          <span className="text-xs font-semibold">{deadlineImminent ? "即將截止" : "距離截止"}</span>
-                          <span className="font-mono text-sm font-bold tabular-nums">{formatCountdown(deadlineRemainingSeconds)}</span>
+                          <span className="text-xs font-semibold">{roundTimeExpired ? "本輪時間已到" : "本輪剩餘"}</span>
+                          {!roundTimeExpired && <span className="font-mono text-sm font-bold tabular-nums">{formatCountdown(roundRemainingSeconds)}</span>}
                         </div>
                       )}
                     </div>
