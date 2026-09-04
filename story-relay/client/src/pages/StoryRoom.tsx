@@ -326,13 +326,6 @@ export default function StoryRoom() {
                   <h1 className="mt-3 font-serif text-4xl font-semibold tracking-[-0.045em] text-[#233B35] sm:text-5xl">{displayName(activity.name)}</h1>
                   <p className="mt-4 max-w-2xl text-sm leading-7 text-[#68746B]">{activity.prompt || story.prompt || "老師沒有設定故事提示。"}</p>
                   {activity.deadline && <p className="mt-2 text-xs text-[#8A8F86]">截止時間：{new Date(activity.deadline).toLocaleString()}</p>}
-                  {activity.status === "active" && deadlineRemainingSeconds != null && (
-                    <div className={`mt-4 inline-flex items-center gap-2 rounded-xl px-3.5 py-2 ${deadlineImminent ? "bg-[#F7E5DF] text-[#8D4033]" : "bg-[#EDF3EC] text-[#355447]"}`}>
-                      <Clock3 size={15} />
-                      <span className="text-xs font-semibold">{deadlineImminent ? "即將截止" : "距離截止"}</span>
-                      <span className="font-mono text-sm font-bold tabular-nums">{formatCountdown(deadlineRemainingSeconds)}</span>
-                    </div>
-                  )}
                 </div>
                 <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${story.status === "active" ? "bg-[#E7EFE5] text-[#456348]" : deadlineClosed ? "bg-[#F5E6D8] text-[#8B5E37]" : "bg-[#ECE9E3] text-[#6F746F]"}`}>{storyStatusLabel(story.status, activity.closed_reason)}</span>
               </div>
@@ -381,7 +374,16 @@ export default function StoryRoom() {
 
                 {round && story.status === "active" && (
                   <section className="rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm sm:p-8">
-                    <div className="flex items-center gap-2"><PenLine size={19} className="text-[#A64E3C]" /><h2 className="font-serif text-2xl font-semibold">下一段</h2></div>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2"><PenLine size={19} className="text-[#A64E3C]" /><h2 className="font-serif text-2xl font-semibold">下一段</h2></div>
+                      {deadlineRemainingSeconds != null && (
+                        <div className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 ${deadlineImminent ? "bg-[#F7E5DF] text-[#8D4033]" : "bg-[#EDF3EC] text-[#355447]"}`}>
+                          <Clock3 size={15} />
+                          <span className="text-xs font-semibold">{deadlineImminent ? "即將截止" : "距離截止"}</span>
+                          <span className="font-mono text-sm font-bold tabular-nums">{formatCountdown(deadlineRemainingSeconds)}</span>
+                        </div>
+                      )}
+                    </div>
                     {isCurrentWriter ? (
                       <form onSubmit={handleSubmit} className="mt-5">
                         <textarea
