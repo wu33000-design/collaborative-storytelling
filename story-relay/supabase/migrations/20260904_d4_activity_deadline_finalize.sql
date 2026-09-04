@@ -104,7 +104,7 @@ begin
   values (
     p_activity_id,
     'activity_deadline_reached',
-    null,
+    v_user_id,
     jsonb_build_object('deadline', v_activity.deadline, 'reason', 'deadline')
   );
 
