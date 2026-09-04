@@ -17,6 +17,7 @@ import StoryRoom from "./pages/StoryRoom";
 import TeacherActivityDashboard from "./pages/TeacherActivityDashboard";
 import TeacherDashboardIndex from "./pages/TeacherDashboardIndex";
 import TeacherHub from "./pages/TeacherHub";
+import XssSmokeProbe from "./pages/XssSmokeProbe";
 
 function Router() {
   return (
@@ -32,6 +33,7 @@ function Router() {
         <Route path={"/admin/activity/:activityId/content"} component={PlatformActivityContent} />
         <Route path={"/admin/activity-delete"} component={PlatformActivityDeletion} />
         <Route path={"/admin"} component={PlatformAdminShell} />
+        <Route path={"/test/xss"} component={XssSmokeProbe} />
         <Route path={"/demo"} component={Home} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
