@@ -12,6 +12,7 @@ declare
   v_group uuid := gen_random_uuid();
   v_story uuid := gen_random_uuid();
   v_round uuid := gen_random_uuid();
+  v_round_2 uuid := gen_random_uuid();
   v_blocked boolean := false;
   v_count integer;
   i integer;
@@ -87,19 +88,29 @@ begin
     raise exception 'CLASSROOM_100 E3 failed: expected durable count 20 after throttle, got %', v_count;
   end if;
 
-  -- Buckets are per authenticated user, not global/classroom-wide.
-  execute 'set local role authenticated';
-  perform set_config('request.jwt.claims', json_build_object('sub',v_host::text,'role','authenticated')::text, true);
-  perform public.consume_rpc_rate_limit('test_independent_bucket', 1, 60);
-  execute 'reset role';
+  -- A different authenticated user gets an independent volunteer bucket.
+  update public.relay_rounds
+  set status='completed', completed_at=now()
+  where id=v_round;
+
+  insert into public.relay_rounds (id,story_id,round_no,current_writer_id,status)
+  values (v_round_2,v_story,2,v_student,'writing');
 
   execute 'set local role authenticated';
   perform set_config('request.jwt.claims', json_build_object('sub',v_other::text,'role','authenticated')::text, true);
-  perform public.consume_rpc_rate_limit('test_independent_bucket', 1, 60);
+  perform public.volunteer_for_round(v_round_2);
   execute 'reset role';
 
-  if (select count(*) from public.rpc_rate_limit_state where action='test_independent_bucket') <> 2 then
+  if (select count(*) from public.rpc_rate_limit_state where action='volunteer_for_round') <> 2 then
     raise exception 'CLASSROOM_100 E3 failed: independent users did not receive independent buckets';
+  end if;
+
+  select request_count into v_count
+  from public.rpc_rate_limit_state
+  where user_id=v_other and action='volunteer_for_round';
+
+  if v_count <> 1 then
+    raise exception 'CLASSROOM_100 E3 failed: second user bucket should start at 1, got %', v_count;
   end if;
 end;
 $$;
