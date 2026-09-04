@@ -198,15 +198,23 @@
 - 若只有一位 eligible writer，沿用 single-writer fallback。
 - 參與者離開後 future candidate pool 排除，但歷史保留。
 
-自動 timeout 不在此階段做，保留給 D4。
+每輪秒數的自動 timeout 不納入本次 100 人課堂 MVP；D4 處理的是活動整體 deadline 自動截止。
 
 ## D2 完成故事頁
+
+**狀態：完成（2026-09-04）。**
+
+**結果：PASS。** `completed` 與 `closed/stopped` story 皆可唯讀查看完整內容；Writer 0 與所有提交段落清楚呈現。一般參與者仍受 group RLS 限制，host 僅讀自己活動，platform admin 走獨立的唯讀 content RPC。另修正 non-active 狀態文案，使完成與停止不再混淆。
 
 - completed / stopped story 可讀。
 - 清楚呈現 Writer 0 與所有提交段落。
 - 參與者只能讀自己有權限的故事；host 可讀自己活動；platform admin 走 admin content RPC。
 
 ## D3 主持人 CSV
+
+**狀態：完成（2026-09-04）。**
+
+**結果：PASS。** 主持人專用 `get_teacher_activity_csv(uuid)` rollback test 通過；CSV 已以「每個活動一份」放在主持人區各活動卡片內。實際下載以試算表開啟後中文與欄位正常。CSV 不包含故事全文或平台登入 Email，並處理 UTF-8 BOM、CSV escaping 與試算表公式注入前綴。
 
 只匯出該活動所需的課堂紀錄：
 
@@ -221,7 +229,13 @@
 
 ## D4 自動截止
 
-- deadline 到期後停止新 join／submit。
+**狀態：後端 PASS；前端已實作，待 UI smoke（2026-09-04）。**
+
+**後端結果：PASS。** `finalize_activity_deadline(uuid)` 為 idempotent finalizer；deadline 到期時將 active Activity 標記 `closed_reason='deadline'`、active Story 關閉、active Round 標記 `expired`，並留下 `activity_deadline_reached` event。既有 `join_activity_by_code`、`submit_segment`、`start_relay_round` 均已有 deadline boundary。Rollback SQL 測試 `CLASSROOM_100 D4 activity deadline passed`。
+
+前端 StoryRoom 與主持人活動監控頁會在載入時執行 finalizer；已開啟頁面也會依 deadline 設定 timer，在時間到達時立即收斂狀態並轉唯讀。主持人監控頁會明確顯示「已截止」與截止原因。
+
+- deadline 到期後停止新 join／submit／round start。
 - 對 active round 使用明確 expired 狀態。
 - host dashboard 顯示截止原因。
 
