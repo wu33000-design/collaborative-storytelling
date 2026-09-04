@@ -63,6 +63,16 @@ begin
     delete from public.platform_admins where user_id = v_host;
   end if;
 
+  -- Sanity check while still running as SQL Editor owner. authenticated is
+  -- intentionally not allowed to SELECT platform_admins directly.
+  select count(*) into v_rows
+  from public.platform_admins
+  where user_id = v_participant;
+  v_checks := v_checks + 1;
+  if v_rows <> 0 then
+    v_failed := concat_ws('; ', v_failed, 'participant remained platform admin during ordinary-role checks');
+  end if;
+
   -- SQL Editor owner creates a valid rollback-only fixture.
   insert into public.activities (id, teacher_id, code, name, status, group_size)
   values (
@@ -142,13 +152,6 @@ begin
   perform set_config('role', 'authenticated', true);
   perform set_config('request.jwt.claim.sub', v_participant::text, true);
   perform set_config('request.jwt.claims', jsonb_build_object('sub', v_participant, 'role', 'authenticated')::text, true);
-
-  -- Sanity check: participant must not be a platform admin during this phase.
-  select count(*) into v_rows from public.platform_admins where user_id = v_participant;
-  v_checks := v_checks + 1;
-  if v_rows <> 0 then
-    v_failed := concat_ws('; ', v_failed, 'participant remained platform admin during ordinary-role checks');
-  end if;
 
   -- writer_states UPDATE must affect zero rows or raise.
   v_rows := 0;
