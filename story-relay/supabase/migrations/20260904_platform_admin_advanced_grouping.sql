@@ -6,6 +6,8 @@
 --   - Platform administrators may set a finite group_size and therefore use
 --     automatic multi-group allocation.
 --
+-- Trusted SQL/migration contexts have no auth.uid() and remain allowed so that
+-- migrations and rollback-only fixtures can exercise advanced grouping.
 -- This does not rewrite or delete existing activities. Existing finite
 -- group_size values remain valid until someone attempts to change them.
 
@@ -24,8 +26,10 @@ begin
     return new;
   end if;
 
+  -- SQL Editor / migrations / trusted service contexts do not carry an end-user
+  -- auth.uid(). They are allowed to create fixtures and perform administration.
   if v_user_id is null then
-    raise exception 'Authentication required';
+    return new;
   end if;
 
   if not exists (
@@ -42,8 +46,8 @@ $$;
 
 revoke all on function public.enforce_platform_admin_advanced_grouping() from public;
 
-DROP TRIGGER IF EXISTS activities_platform_admin_advanced_grouping
-  ON public.activities;
+drop trigger if exists activities_platform_admin_advanced_grouping
+  on public.activities;
 
 create trigger activities_platform_admin_advanced_grouping
 before insert or update of group_size on public.activities
