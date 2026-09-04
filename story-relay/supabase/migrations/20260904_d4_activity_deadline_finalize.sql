@@ -23,7 +23,7 @@ as $$
 declare
   v_user_id uuid := auth.uid();
   v_activity public.activities%rowtype;
-  v_changed boolean := false;
+  v_row_count integer := 0;
 begin
   if v_user_id is null then
     raise exception 'Authentication required';
@@ -77,9 +77,9 @@ begin
   where a.id = p_activity_id
     and a.status = 'active';
 
-  get diagnostics v_changed = row_count;
+  get diagnostics v_row_count = row_count;
 
-  if not v_changed then
+  if v_row_count = 0 then
     return false;
   end if;
 
