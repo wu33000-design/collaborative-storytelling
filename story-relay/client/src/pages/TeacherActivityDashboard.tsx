@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, BookOpen, Clock3, Loader2, RefreshCw, Users } from "lucide-react";
+import { ArrowLeft, BookOpen, Clock3, Loader2, RefreshCw, SkipForward, Users } from "lucide-react";
 import { Link, useRoute } from "wouter";
 import { supabase } from "@/lib/supabase";
 
@@ -35,6 +35,7 @@ export default function TeacherActivityDashboard() {
   const [groups, setGroups] = useState<GroupDashboardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [skipBusyGroupId, setSkipBusyGroupId] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async (silent = false) => {
     if (!activityId) {
@@ -98,6 +99,41 @@ export default function TeacherActivityDashboard() {
     };
   }, [activityId, loadDashboard]);
 
+  const handleSkipRound = async (group: GroupDashboardRow) => {
+    if (!group.current_round_no || !group.current_writer_id) return;
+
+    const roundResult = await supabase
+      .from("relay_rounds")
+      .select("id")
+      .eq("story_id", group.story_id)
+      .in("status", ["open", "writing"])
+      .order("round_no", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (roundResult.error || !roundResult.data) {
+      setError(roundResult.error?.message || "找不到目前可跳過的 Round。");
+      return;
+    }
+
+    const writerLabel = group.current_writer_name || "目前作者";
+    if (!window.confirm(`確定要跳過 ${group.group_name} 的 ${writerLabel}，並立即換下一棒嗎？\n\n目前 Round 會保留為 expired，不會刪除既有故事內容。`)) {
+      return;
+    }
+
+    setSkipBusyGroupId(group.group_id);
+    setError(null);
+    const { error: rpcError } = await supabase.rpc("skip_relay_round", { p_round_id: roundResult.data.id });
+    setSkipBusyGroupId(null);
+
+    if (rpcError) {
+      setError(rpcError.message);
+      return;
+    }
+
+    await loadDashboard(true);
+  };
+
   const summary = useMemo(() => {
     return {
       groups: groups.length,
@@ -121,7 +157,7 @@ export default function TeacherActivityDashboard() {
 
         {error && (
           <section className="mt-8 rounded-2xl border border-[#E7C8BF] bg-[#F7E5DF] p-5 text-[#8D4033]">
-            <div className="font-semibold">監控資料讀取失敗</div>
+            <div className="font-semibold">監控操作失敗</div>
             <div className="mt-2 break-words font-mono text-xs">{error}</div>
           </section>
         )}
@@ -133,7 +169,7 @@ export default function TeacherActivityDashboard() {
                 <div>
                   <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#A06B59]">主持人活動監控 · {activity.code}</div>
                   <h1 className="mt-3 font-serif text-4xl font-semibold tracking-[-0.045em] text-[#233B35] sm:text-5xl">{activityName(activity.name)}</h1>
-                  <p className="mt-4 text-sm leading-7 text-[#68746B]">即時查看所有小組的接力狀態。參與者提交段落、換棒或故事完成後，此頁會自動更新。</p>
+                  <p className="mt-4 text-sm leading-7 text-[#68746B]">即時查看所有小組的接力狀態。參與者提交段落、換棒或故事完成後，此頁會自動更新。若目前作者離線或無法完成，主持人可手動跳過該 Round 並換下一棒。</p>
                 </div>
                 <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${activity.status === "active" ? "bg-[#E7EFE5] text-[#456348]" : "bg-[#ECE9E3] text-[#77776F]"}`}>{activity.status}</span>
               </div>
@@ -158,6 +194,7 @@ export default function TeacherActivityDashboard() {
                     const progress = required && required > 0 ? Math.min(100, Math.round((group.completed_segments / required) * 100)) : null;
                     const isActive = group.story_status === "active";
                     const hasRound = group.current_round_no != null;
+                    const canSkip = activity.status === "active" && isActive && (group.current_round_status === "writing" || group.current_round_status === "open");
 
                     return (
                       <article key={group.group_id} className="rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-6 shadow-sm">
@@ -180,7 +217,19 @@ export default function TeacherActivityDashboard() {
                           <div className="flex items-center justify-between gap-3"><span className="inline-flex items-center gap-1.5 text-[#7B827B]"><Clock3 size={13} />最後活動</span><span className="text-right text-xs text-[#56645C]">{new Date(group.last_activity_at).toLocaleString()}</span></div>
                         </div>
 
-                        <Link href={`/room/${group.group_id}`} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#233B35] px-4 py-2.5 text-sm font-semibold text-[#FFFDF8] hover:bg-[#304D44]"><BookOpen size={15} />進入故事</Link>
+                        {canSkip && (
+                          <button
+                            type="button"
+                            disabled={skipBusyGroupId === group.group_id}
+                            onClick={() => void handleSkipRound(group)}
+                            className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl border border-[#C99075] bg-[#FFF7F2] px-4 py-2.5 text-sm font-semibold text-[#8D4C38] hover:bg-[#FBEADF] disabled:opacity-60"
+                          >
+                            {skipBusyGroupId === group.group_id ? <Loader2 size={15} className="animate-spin" /> : <SkipForward size={15} />}
+                            跳過並換棒
+                          </button>
+                        )}
+
+                        <Link href={`/room/${group.group_id}`} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#233B35] px-4 py-2.5 text-sm font-semibold text-[#FFFDF8] hover:bg-[#304D44]"><BookOpen size={15} />進入故事</Link>
                       </article>
                     );
                   })}
