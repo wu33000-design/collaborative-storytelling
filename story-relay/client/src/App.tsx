@@ -7,7 +7,6 @@ import AuthGate from "./components/AuthGate";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
-import JoinActivity from "./pages/JoinActivity";
 import PlatformActivityContent from "./pages/PlatformActivityContent";
 import PlatformActivityContentIndex from "./pages/PlatformActivityContentIndex";
 import PlatformActivityDeletion from "./pages/PlatformActivityDeletion";
@@ -24,7 +23,6 @@ function Router() {
       <Switch>
         <Route path={"/"} component={Start} />
         <Route path={"/create"} component={TeacherHub} />
-        <Route path={"/join"} component={JoinActivity} />
         <Route path={"/teacher"} component={TeacherDashboardIndex} />
         <Route path={"/teacher/activity/:activityId"} component={TeacherActivityDashboard} />
         <Route path={"/room/:groupId"} component={StoryRoom} />
