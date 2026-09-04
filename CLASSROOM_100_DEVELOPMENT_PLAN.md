@@ -123,7 +123,11 @@
 
 # Phase C — 100 人課堂安全與容量驗證
 
+**狀態：完成（2026-09-04）**
+
 ## C1 五角色權限矩陣
+
+**結果：PASS。** SQL cross-group RLS、Realtime cross-group isolation、host/platform-admin/participant mutation boundary 均完成動態驗證。
 
 角色：
 
@@ -144,6 +148,8 @@
 
 ## C2 100 人容量 smoke test
 
+**結果：PASS。** 100 人 join → 20 組（group size 5）、100 次真實 segment submit + next-writer selection、20 組 host dashboard summary 均一致；Realtime probe 收到 200/200 events、0 duplicate，burst 期間最大 heartbeat drift 2 ms。
+
 不是企業級 load test；只驗證典型課堂峰值：
 
 - 100 個 join request 分批／短時間進入同一活動。
@@ -156,6 +162,8 @@
 若免費 Supabase quota 或 Realtime 限制成為瓶頸，先量測再決定是否升級方案，不預先加入複雜架構。
 
 ## C3 XSS smoke test
+
+**結果：PASS。** activity name、prompt、display name、segment 四類輸入皆以純文字呈現；payload side effect 0、unexpected script nodes 0、unexpected img/svg nodes 0。Repo 靜態掃描亦未找到 `dangerouslySetInnerHTML` 或 `innerHTML` 使用。
 
 用下列類型輸入活動名稱、prompt、display name、segment：
 
