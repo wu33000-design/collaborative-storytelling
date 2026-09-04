@@ -10,22 +10,19 @@ Target architecture:
 `Cloudflare Workers = public Story Relay frontend`  
 `Supabase = authenticated backend/data plane`
 
-The current GitHub Pages deployment remains available only during migration. It must not be unpublished until the Cloudflare deployment, OAuth redirect, and core product flow have all been verified.
-
 ---
 
 ## E1 — Move Story Relay frontend off GitHub Pages
 
-**狀態：Cloudflare migration PASS；待取消此 repo 的 GitHub Pages（2026-09-04）。**
+**狀態：PASS（2026-09-04）。**
 
 ### Repository preparation
 
-- Keep the existing GitHub Pages workflow unchanged during migration so the current production URL remains a fallback.
 - Add `pnpm run build:cloudflare` in `story-relay/package.json`.
-- Cloudflare build must use root base `/`, not the GitHub Pages subpath.
+- Cloudflare build uses root base `/`, not the former GitHub Pages subpath.
 - Static output directory is `dist/public` relative to `story-relay`.
 - Supabase URL and publishable key remain build-time environment variables. Never place service-role credentials in Cloudflare or the browser bundle.
-- Add `story-relay/wrangler.jsonc` with Worker name `story-relay` and compatibility date so connected builds deploy deterministically.
+- `story-relay/wrangler.jsonc` defines Worker name `story-relay` and compatibility date for deterministic connected deployments.
 
 ### Cloudflare connected build settings
 
@@ -51,65 +48,91 @@ Verified on 2026-09-04:
 5. Host created activity `SR-798715` from the Cloudflare deployment.
 6. User joined `SR-798715` directly from the home-page activity-code form and entered StoryRoom.
 7. Relay flow smoke passed: current-writer state appeared, the 30-second round countdown appeared, segment submission succeeded, and the next round loaded.
-8. Core authenticated Supabase RPC/data path therefore works from the Cloudflare deployment.
-
-Remaining E1 cutover action:
-
-- Unpublish Story Relay's GitHub Pages site / disable this repository's Pages deployment.
-- Do not alter Pages configuration for any other repository.
-- After unpublishing, verify that Story Relay continues to function only from the Cloudflare production URL.
+8. Core authenticated Supabase RPC/data path works from the Cloudflare deployment.
+9. This repository's GitHub Pages site was manually unpublished.
+10. The obsolete `.github/workflows/deploy-pages.yml` workflow was removed so future pushes cannot automatically re-enable this repository's Pages deployment.
+11. No Pages configuration for any other repository was changed.
 
 ---
 
 ## E2 — Cloudflare edge protection
 
-After E1 is stable:
+**狀態：PASS for current free `workers.dev` architecture（2026-09-04）。**
 
-- Keep Cloudflare DDoS protection as the public network edge.
-- Add conservative WAF/rate-limit rules only after normal classroom traffic is measured.
-- Do not use rules that risk blocking a legitimate burst of ~100 classroom users.
-- Prefer protections against obvious automated abuse over aggressive global limits.
-- If a custom domain is later added, keep it proxied through Cloudflare and avoid exposing an alternate public frontend origin.
+Current policy:
+
+- Cloudflare Workers is the public frontend edge; GitHub Pages is no longer a Story Relay frontend origin.
+- Keep Cloudflare's automatic DDoS mitigation as the network edge protection.
+- Continue using the free `workers.dev` hostname; no custom domain is required for the current classroom MVP.
+- Do not add aggressive IP-based limits that could block a legitimate classroom burst where many users share a school/network egress IP.
+- Do not add Cloudflare Access because the classroom application already has its own authentication and students should not face an extra access gate.
+- Add custom WAF/rate-limit rules only if later operational evidence shows a concrete need and a custom domain/zone configuration makes those controls appropriate.
 
 ### E2 acceptance
 
-- Normal 100-person classroom flow remains unaffected.
+- Normal classroom smoke flow works through Cloudflare.
 - Static frontend requests are served by Cloudflare, not GitHub Pages.
 - No public Story Relay GitHub Pages fallback remains after cutover.
+- Other GitHub repository Pages sites were not modified.
 
 ---
 
 ## E3 — Supabase application-layer abuse protection
 
-Cloudflare protecting the frontend does not protect Supabase from clients that call the Supabase endpoint directly. Add lightweight application-layer controls for expensive mutation paths.
+**狀態：PASS（2026-09-04）。**
 
-Priority RPCs:
+Cloudflare protecting the frontend does not protect Supabase from clients that call the Supabase endpoint directly. Lightweight server-side limits were therefore added around the main mutation RPCs.
 
-1. `join_activity_by_code`
-2. `start_relay_round`
-3. `submit_segment`
-4. `nominate_candidate`
-5. `volunteer_for_round`
-6. deadline/finalizer endpoints only if evidence shows abuse value
+Migration:
 
-Requirements:
+`story-relay/supabase/migrations/20260904_e3_rpc_abuse_rate_limits.sql`
 
-- Rate limits must be keyed primarily by authenticated user/session or another trustworthy server-side identity boundary.
-- Do not treat browser-provided IP/user identifiers as authorization data.
-- Preserve idempotency and existing row locks.
-- Return a clear throttling error without corrupting round/story state.
-- Keep limits loose enough for legitimate classroom bursts.
-- Add rollback-only SQL tests for throttle boundaries before enabling production enforcement.
+Rollback-only test:
+
+`story-relay/supabase/tests/classroom100_phase_e3_rpc_abuse_rate_limits.sql`
+
+### Implemented limits
+
+Rate-limit buckets are keyed by authenticated user and action, not by browser-provided IP or a classroom-wide counter:
+
+- `join_activity_by_code`: 20 calls / 60 seconds / user
+- `start_relay_round`: 20 calls / 60 seconds / user
+- `submit_segment`: 8 calls / 60 seconds / user
+- `nominate_candidate`: 60 calls / 60 seconds / user
+- `volunteer_for_round`: 20 calls / 60 seconds / user
+
+The pre-existing RPC implementations are preserved as internal unthrottled functions. Direct execution of those internal implementations and the rate-limit bucket helper is revoked from `authenticated`; browser clients can only call the public throttled wrappers.
+
+This design keeps the limit independent for each logged-in participant, so legitimate simultaneous use by roughly 100 classroom users does not consume one shared quota.
 
 ### E3 acceptance
 
-- Repeated abusive mutation calls are throttled.
-- Ordinary classroom usage remains unaffected.
-- RLS/authorization behavior remains unchanged.
-- No new secret is exposed to the client.
+**結果：PASS。** Supabase SQL Editor returned:
+
+`CLASSROOM_100 E3 RPC abuse rate limits passed`
+
+Verified by the rollback-only test:
+
+- the configured threshold permits valid calls up to the cap and blocks the next call;
+- blocked calls return a clear `Too many requests` error;
+- durable bucket state does not exceed the configured cap;
+- separate authenticated users receive independent buckets;
+- authenticated clients cannot bypass the wrapper through the internal implementation;
+- authenticated clients cannot directly mutate rate-limit buckets;
+- the test rolls back all fixture data.
 
 ---
 
+## Phase E result
+
+**Phase E is complete for the current ~100-person classroom MVP.**
+
+Final public architecture:
+
+`GitHub repository` → source control / Cloudflare connected builds  
+`Cloudflare Workers (workers.dev)` → public frontend + automatic edge DDoS mitigation  
+`Supabase Auth/PostgreSQL/RLS/RPC/Realtime` → authenticated backend with application-layer RPC throttling
+
 ## Scope boundary
 
-This phase is abuse hardening for the current ~100-person classroom product. It does not add enterprise DDoS appliances, dedicated API gateways, Redis, SIEM, multi-region failover, or synthetic flood testing unless real operational evidence later justifies them.
+This phase is abuse hardening for the current ~100-person classroom product. It intentionally does not add enterprise DDoS appliances, dedicated API gateways, Redis, SIEM, multi-region failover, purchased custom domains, or synthetic flood testing unless real operational evidence later justifies them.
