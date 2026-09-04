@@ -30,6 +30,7 @@ declare
   v_failed text := null;
   v_checks integer := 0;
   v_threw boolean;
+  v_host_stop_error text := null;
 begin
   -- Pick one existing platform admin for the admin role.
   select pa.user_id
@@ -124,20 +125,23 @@ begin
     v_failed := concat_ws('; ', v_failed, 'non_host stop_activity unexpectedly succeeded');
   end if;
 
-  -- Owner positive control.
+  -- Owner positive control. Preserve the exact failure diagnostics if this call
+  -- fails so the next run distinguishes a product defect from a test harness bug.
   perform set_config('role', 'authenticated', true);
   perform set_config('request.jwt.claim.sub', v_host::text, true);
   perform set_config('request.jwt.claims', jsonb_build_object('sub', v_host, 'role', 'authenticated')::text, true);
 
   v_threw := false;
+  v_host_stop_error := null;
   begin
     perform public.stop_activity(v_activity);
   exception when others then
     v_threw := true;
+    v_host_stop_error := format('SQLSTATE=%s SQLERRM=%s', sqlstate, sqlerrm);
   end;
   v_checks := v_checks + 1;
   if v_threw then
-    v_failed := concat_ws('; ', v_failed, 'host stop_activity failed');
+    v_failed := concat_ws('; ', v_failed, 'host stop_activity failed: ' || coalesce(v_host_stop_error, 'unknown error'));
   end if;
 
   -- Return fixture to active state as SQL Editor owner for remaining tests.
