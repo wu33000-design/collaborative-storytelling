@@ -7,7 +7,7 @@ Protect Story Relay without exposing the user's other GitHub Pages sites to Stor
 Target architecture:
 
 `GitHub = source control`  
-`Cloudflare Pages = public Story Relay frontend`  
+`Cloudflare Workers = public Story Relay frontend`  
 `Supabase = authenticated backend/data plane`
 
 The current GitHub Pages deployment remains available only during migration. It must not be unpublished until the Cloudflare deployment, OAuth redirect, and core product flow have all been verified.
@@ -16,6 +16,8 @@ The current GitHub Pages deployment remains available only during migration. It 
 
 ## E1 — Move Story Relay frontend off GitHub Pages
 
+**狀態：Cloudflare migration PASS；待取消此 repo 的 GitHub Pages（2026-09-04）。**
+
 ### Repository preparation
 
 - Keep the existing GitHub Pages workflow unchanged during migration so the current production URL remains a fallback.
@@ -23,38 +25,39 @@ The current GitHub Pages deployment remains available only during migration. It 
 - Cloudflare build must use root base `/`, not the GitHub Pages subpath.
 - Static output directory is `dist/public` relative to `story-relay`.
 - Supabase URL and publishable key remain build-time environment variables. Never place service-role credentials in Cloudflare or the browser bundle.
+- Add `story-relay/wrangler.jsonc` with Worker name `story-relay` and compatibility date so connected builds deploy deterministically.
 
-### Cloudflare Pages Git integration settings
+### Cloudflare connected build settings
 
 - Repository: `wu33000-design/collaborative-storytelling`
 - Production branch: `main`
-- Root directory: `story-relay`
-- Build command: `pnpm run build:cloudflare`
-- Build output directory: `dist/public`
-- Required environment variables:
+- Root directory: `/story-relay`
+- Build command: `pnpm install --frozen-lockfile && pnpm run build:cloudflare`
+- Deploy command: `npx wrangler deploy --assets ./dist/public`
+- Required build-time environment variables:
   - `VITE_SUPABASE_URL`
   - `VITE_SUPABASE_PUBLISHABLE_KEY`
 
-Cloudflare Pages Git integration is preferred so normal pushes to `main` produce deployments directly from the repository.
-
 ### E1 acceptance
 
-Before touching GitHub Pages:
+**結果：PASS。** Production URL: `https://story-relay.wu33000.workers.dev`
 
-1. Cloudflare deployment succeeds.
-2. Root page loads from the Cloudflare Pages hostname.
-3. Google OAuth login succeeds and returns to the Cloudflare hostname.
+Verified on 2026-09-04:
+
+1. Cloudflare connected build and deploy succeed.
+2. Root page loads from the Cloudflare Workers hostname.
+3. Google OAuth login succeeds and returns to the Cloudflare hostname after Supabase Site URL / Redirect URLs were updated.
 4. Existing session/auth gate works.
-5. User can enter an activity code on the home page and join.
-6. StoryRoom loads, Realtime updates work, and submission works.
-7. Host can create/manage an activity.
-8. Platform-admin page remains authorization-gated.
-9. Supabase allowed redirect URLs include the Cloudflare Pages production URL.
+5. Host created activity `SR-798715` from the Cloudflare deployment.
+6. User joined `SR-798715` directly from the home-page activity-code form and entered StoryRoom.
+7. Relay flow smoke passed: current-writer state appeared, the 30-second round countdown appeared, segment submission succeeded, and the next round loaded.
+8. Core authenticated Supabase RPC/data path therefore works from the Cloudflare deployment.
 
-Only after all acceptance checks pass:
+Remaining E1 cutover action:
 
-- Unpublish Story Relay's GitHub Pages site / disable its Pages deployment.
+- Unpublish Story Relay's GitHub Pages site / disable this repository's Pages deployment.
 - Do not alter Pages configuration for any other repository.
+- After unpublishing, verify that Story Relay continues to function only from the Cloudflare production URL.
 
 ---
 
