@@ -11,6 +11,8 @@ type Activity = {
   status: string;
   min_words: number | null;
   max_words: number | null;
+  deadline: string | null;
+  closed_reason: string | null;
 };
 type Group = { id: string; name: string; activity_id: string };
 type Story = { id: string; title: string | null; prompt: string | null; status: string };
@@ -23,7 +25,7 @@ type Nomination = { candidate_id: string };
 type Volunteer = { user_id: string };
 
 const displayName = (value: string | null) => value || "未命名活動";
-const storyStatusLabel = (value: string) => value === "active" ? "進行中" : value === "completed" ? "已完成" : value === "closed" || value === "stopped" ? "已停止" : value;
+const storyStatusLabel = (value: string, closedReason: string | null) => closedReason === "deadline" ? "已截止" : value === "active" ? "進行中" : value === "completed" ? "已完成" : value === "closed" || value === "stopped" ? "已停止" : value;
 
 export default function StoryRoom() {
   const [, params] = useRoute("/room/:groupId");
@@ -78,8 +80,15 @@ export default function StoryRoom() {
     const loadedGroup = groupData as Group;
     setGroup(loadedGroup);
 
+    const { error: deadlineError } = await supabase.rpc("finalize_activity_deadline", { p_activity_id: loadedGroup.activity_id });
+    if (deadlineError) {
+      setError(deadlineError.message);
+      setLoading(false);
+      return;
+    }
+
     const [activityResult, storyResult, memberResult, historyResult] = await Promise.all([
-      supabase.from("activities").select("id, code, name, prompt, status, min_words, max_words").eq("id", loadedGroup.activity_id).maybeSingle(),
+      supabase.from("activities").select("id, code, name, prompt, status, min_words, max_words, deadline, closed_reason").eq("id", loadedGroup.activity_id).maybeSingle(),
       supabase.from("stories").select("id, title, prompt, status").eq("group_id", loadedGroup.id).maybeSingle(),
       supabase.from("group_members").select("user_id, role, joined_at").eq("group_id", loadedGroup.id).is("left_at", null).order("joined_at"),
       supabase.from("activity_name_history").select("id, old_name, new_name, changed_at").eq("activity_id", loadedGroup.activity_id).order("changed_at", { ascending: true }),
@@ -147,6 +156,31 @@ export default function StoryRoom() {
   useEffect(() => {
     void loadRoom();
   }, [loadRoom]);
+
+  useEffect(() => {
+    if (!activity?.id || activity.status !== "active" || !activity.deadline) return;
+
+    const deadlineMs = Date.parse(activity.deadline);
+    if (!Number.isFinite(deadlineMs)) return;
+
+    let timer: number | undefined;
+    const finalize = async () => {
+      const { error: deadlineError } = await supabase.rpc("finalize_activity_deadline", { p_activity_id: activity.id });
+      if (deadlineError) setError(deadlineError.message);
+      else await loadRoom(true);
+    };
+
+    const remaining = deadlineMs - Date.now();
+    if (remaining <= 0) {
+      void finalize();
+      return;
+    }
+
+    timer = window.setTimeout(() => void finalize(), Math.min(remaining + 50, 2_147_000_000));
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [activity?.deadline, activity?.id, activity?.status, loadRoom]);
 
   useEffect(() => {
     if (!groupId || !group || !activity || !story) return;
@@ -219,6 +253,7 @@ export default function StoryRoom() {
     if (rpcError) {
       setError(rpcError.message);
       setSubmitting(false);
+      await loadRoom(true);
       return;
     }
 
@@ -237,6 +272,7 @@ export default function StoryRoom() {
   const draftLength = draft.trim().length;
   const belowMinimum = activity?.min_words != null && draftLength < activity.min_words;
   const aboveMaximum = activity?.max_words != null && draftLength > activity.max_words;
+  const deadlineClosed = activity?.closed_reason === "deadline";
 
   return (
     <div className="min-h-screen bg-[#F5F1E9] px-5 py-10 text-[#1F2E2A] sm:py-14">
@@ -261,8 +297,9 @@ export default function StoryRoom() {
                   <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#A06B59]">{activity.code} · {group.name}</div>
                   <h1 className="mt-3 font-serif text-4xl font-semibold tracking-[-0.045em] text-[#233B35] sm:text-5xl">{displayName(activity.name)}</h1>
                   <p className="mt-4 max-w-2xl text-sm leading-7 text-[#68746B]">{activity.prompt || story.prompt || "老師沒有設定故事提示。"}</p>
+                  {activity.deadline && <p className="mt-2 text-xs text-[#8A8F86]">截止時間：{new Date(activity.deadline).toLocaleString()}</p>}
                 </div>
-                <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${story.status === "active" ? "bg-[#E7EFE5] text-[#456348]" : "bg-[#ECE9E3] text-[#6F746F]"}`}>{storyStatusLabel(story.status)}</span>
+                <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${story.status === "active" ? "bg-[#E7EFE5] text-[#456348]" : deadlineClosed ? "bg-[#F5E6D8] text-[#8B5E37]" : "bg-[#ECE9E3] text-[#6F746F]"}`}>{storyStatusLabel(story.status, activity.closed_reason)}</span>
               </div>
 
               <div className="mt-6 rounded-2xl bg-[#F3EEE5] p-5">
@@ -281,6 +318,8 @@ export default function StoryRoom() {
                   </div>
                 ) : story.status === "completed" ? (
                   <div><div className="font-semibold text-[#30463D]">故事已完成</div><div className="mt-1 text-xs text-[#68746B]">故事已封存為唯讀，不會再建立新的接力輪次。</div></div>
+                ) : deadlineClosed ? (
+                  <div><div className="font-semibold text-[#7C5635]">活動已截止</div><div className="mt-1 text-xs text-[#7B6A59]">截止時間已到；未完成的 Round 已標記為 expired，既有故事內容保留為唯讀。</div></div>
                 ) : (
                   <div><div className="font-semibold text-[#30463D]">故事已停止</div><div className="mt-1 text-xs text-[#68746B]">主持人已停止活動；既有內容保留為唯讀，不會再建立新的接力輪次。</div></div>
                 )}
