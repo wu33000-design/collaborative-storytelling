@@ -1,5 +1,7 @@
 # Story Relay：100 人課堂可用版開發計畫
 
+**整體狀態：完成（2026-09-04）。** A → B → C → D1 → D2 → D3 → D4 → D5 均已完成驗收。
+
 ## 目標
 
 本專案的交付目標不是企業級多租戶平台，而是：
@@ -30,6 +32,7 @@
 - 大於 100 人的正式容量保證。
 - 自動化滲透測試平台。
 - 全面重寫既有 migration 歷史；只修正會影響乾淨部署或安全邊界的問題。
+- 每輪秒數歸零後自動 expire / 換棒；目前 MVP 顯示倒數與「本輪時間已到」，由主持人既有 skip 機制處理逾時 round。
 
 ---
 
@@ -198,7 +201,7 @@
 - 若只有一位 eligible writer，沿用 single-writer fallback。
 - 參與者離開後 future candidate pool 排除，但歷史保留。
 
-每輪秒數的自動 timeout 不納入本次 100 人課堂 MVP；D4 處理的是活動整體 deadline 自動截止。
+每輪秒數的自動 timeout 不納入本次 100 人課堂 MVP；D4 處理的是活動整體 deadline 自動截止。每輪秒數本身仍在 StoryRoom 顯示倒數，逾時後顯示「本輪時間已到」。
 
 ## D2 完成故事頁
 
@@ -229,21 +232,28 @@
 
 ## D4 自動截止
 
-**狀態：後端 PASS；前端已實作，待 UI smoke（2026-09-04）。**
+**狀態：完成（2026-09-04）。**
 
-**後端結果：PASS。** `finalize_activity_deadline(uuid)` 為 idempotent finalizer；deadline 到期時將 active Activity 標記 `closed_reason='deadline'`、active Story 關閉、active Round 標記 `expired`，並留下 `activity_deadline_reached` event。既有 `join_activity_by_code`、`submit_segment`、`start_relay_round` 均已有 deadline boundary。Rollback SQL 測試 `CLASSROOM_100 D4 activity deadline passed`。
+**結果：PASS。** `finalize_activity_deadline(uuid)` 為 idempotent finalizer；deadline 到期時將 active Activity 標記 `closed_reason='deadline'`、active Story 關閉、active Round 標記 `expired`，並留下 `activity_deadline_reached` event。既有 `join_activity_by_code`、`submit_segment`、`start_relay_round` 均已有 deadline boundary。Rollback SQL 測試 `CLASSROOM_100 D4 activity deadline passed`。
 
 前端 StoryRoom 與主持人活動監控頁會在載入時執行 finalizer；已開啟頁面也會依 deadline 設定 timer，在時間到達時立即收斂狀態並轉唯讀。主持人監控頁會明確顯示「已截止」與截止原因。
+
+本階段另完成每輪秒數的可視化。實際 UI smoke 發現 `activities.time_limit_seconds` 已正確保存，但既有 `relay_rounds.started_at` 為 NULL，造成前端無法計算倒數。已以 `20260904_d4_relay_round_started_at.sql` 將 `relay_rounds.started_at` 設為 `default now()`，並只回填仍為 open/writing 且 started_at 為 NULL 的 active Round；rollback test `CLASSROOM_100 D4 relay round started_at passed`。StoryRoom 目前會依 `started_at + time_limit_seconds` 每秒顯示本輪倒數，真實 UI smoke 已確認可見。
 
 - deadline 到期後停止新 join／submit／round start。
 - 對 active round 使用明確 expired 狀態。
 - host dashboard 顯示截止原因。
+- 每輪秒數可在「下一段」右上角顯示倒數；歸零後顯示「本輪時間已到」，不在本 MVP 自動換棒。
+
+同時完成入口流程簡化：首頁「加入活動」區塊直接輸入活動代碼並進入 StoryRoom；獨立 `#/join` route 與 `JoinActivity.tsx` 已移除。
 
 ## D5 最終課堂驗收
 
-用一個完整活動做 end-to-end：
+**狀態：完成（2026-09-04）。**
 
-create → 100 joins → groups → relay → nomination → submissions → host intervention → completion/stop → CSV → delete → admin restore。
+**結果：PASS。** rollback-only 測試 `classroom100_phase_d5_end_to_end.sql` 實際透過目前 RPC 走完核心生命週期，結果為 `CLASSROOM_100 D5 end-to-end acceptance passed`。測試涵蓋：主持人建立活動、參與者加入、啟動 relay round、投稿並建立下一輪、主持人 skip、停止活動、主持人 CSV、平台管理者 soft delete 與 restore，並驗證新 Round `started_at` 不再為 NULL。測試結束全部 rollback，不留下測試資料。
+
+100 人 join / group capacity / Realtime burst 不在 D5 重跑，因 C2 已獨立完成 100 人容量驗證；D5 用於確認 D1–D4 後整體產品生命週期無 regression。
 
 ---
 
@@ -253,9 +263,9 @@ create → 100 joins → groups → relay → nomination → submissions → hos
 
 `A → B → C → D1 → D2 → D3 → D4 → D5`
 
-若某階段發現 blocking security/data-integrity bug，先修 bug 再前進；純 UI polish 不阻擋後續階段。
+**目前全部完成。** 若未來新增功能，應另開新的 development phase / backlog，不再把新需求回填為本次 100 人課堂 MVP 的未完成項目。
 
-專案達到以下條件即可視為「100 人課堂可用版」完成，不再繼續擴張架構：
+專案已達到以下「100 人課堂可用版」完成條件：
 
 - 100 人容量 smoke test 通過。
 - 跨組 RLS / Realtime 隔離通過。
