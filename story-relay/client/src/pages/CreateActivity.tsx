@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { ArrowLeft, BarChart3, CheckCircle2, Copy, DoorOpen, Loader2, MoreHorizontal, OctagonX, Pencil, PlusCircle, RefreshCw, Trash2, X } from "lucide-react";
+import { ArrowLeft, BarChart3, CheckCircle2, Copy, DoorOpen, Download, Loader2, MoreHorizontal, OctagonX, Pencil, PlusCircle, RefreshCw, Trash2, X } from "lucide-react";
 import { Link } from "wouter";
 import { supabase } from "@/lib/supabase";
 
@@ -18,12 +18,35 @@ type CreateResult = {
   story_id: string;
 };
 
+type TeacherCsvRow = {
+  group_id: string;
+  group_name: string;
+  user_id: string;
+  display_name: string | null;
+  role: string;
+  joined_at: string;
+  left_at: string | null;
+  rounds_selected: number;
+  segments_written: number;
+  total_characters: number;
+  first_submission_at: string | null;
+  last_submission_at: string | null;
+};
+
 function optionalInt(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return null;
   const parsed = Number.parseInt(trimmed, 10);
   return Number.isFinite(parsed) ? parsed : null;
 }
+
+const csvCell = (value: string | number | null) => {
+  let text = value == null ? "" : String(value);
+  if (typeof value === "string" && /^\s*[=+\-@]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+};
+
+const safeFilePart = (value: string) => value.replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, "-").slice(0, 80) || "activity";
 
 export default function CreateActivity() {
   const [name, setName] = useState("");
@@ -48,6 +71,7 @@ export default function CreateActivity() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [savingRenameId, setSavingRenameId] = useState<string | null>(null);
+  const [exportingCsvId, setExportingCsvId] = useState<string | null>(null);
 
   const loadActivities = useCallback(async () => {
     setLoadingActivities(true);
@@ -186,6 +210,48 @@ export default function CreateActivity() {
     setSavingRenameId(null);
   };
 
+  const handleExportCsv = async (activity: Activity) => {
+    setExportingCsvId(activity.id);
+    setError(null);
+
+    const { data, error: rpcError } = await supabase.rpc("get_teacher_activity_csv", { p_activity_id: activity.id });
+    if (rpcError) {
+      setError(rpcError.message);
+      setExportingCsvId(null);
+      return;
+    }
+
+    const rows = (data ?? []) as TeacherCsvRow[];
+    const headers = ["小組", "參與者ID", "顯示名稱", "角色", "加入時間", "離開時間", "被選Round次數", "投稿段數", "總字元數", "首次投稿時間", "最後投稿時間"];
+    const csvRows = [
+      headers.map(csvCell).join(","),
+      ...rows.map((row) => [
+        row.group_name,
+        row.user_id,
+        row.display_name,
+        row.role,
+        row.joined_at,
+        row.left_at,
+        row.rounds_selected,
+        row.segments_written,
+        row.total_characters,
+        row.first_submission_at,
+        row.last_submission_at,
+      ].map(csvCell).join(",")),
+    ];
+
+    const blob = new Blob(["\uFEFF", csvRows.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${safeFilePart(activity.code)}-${safeFilePart(activity.name || "未命名活動")}-participants.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    setExportingCsvId(null);
+  };
+
   const copyCode = async (code: string) => navigator.clipboard.writeText(code);
 
   return (
@@ -232,7 +298,7 @@ export default function CreateActivity() {
 
           <aside className="rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm sm:p-8 lg:sticky lg:top-8 lg:self-start">
             <div className="flex items-center justify-between"><div><div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#A06B59]">情境式主持人身分</div><h2 className="mt-2 font-serif text-3xl font-semibold tracking-[-0.04em] text-[#233B35]">我的活動</h2></div><button type="button" onClick={() => void loadActivities()} className="rounded-full p-2 text-[#68746B] hover:bg-[#EEE8DE]" aria-label="重新整理"><RefreshCw size={17} /></button></div>
-            <p className="mt-3 text-sm leading-6 text-[#68746B]">每個帳號最多主持 3 個未刪除活動。常用操作保留在卡片上，管理操作收在更多選單中。</p>
+            <p className="mt-3 text-sm leading-6 text-[#68746B]">每個帳號最多主持 3 個未刪除活動。常用操作與該活動的 CSV 匯出保留在卡片上，管理操作收在更多選單中。</p>
 
             <div className="mt-6 space-y-3">
               {loadingActivities && <div className="flex items-center gap-2 text-sm text-[#68746B]"><Loader2 size={16} className="animate-spin" />載入中…</div>}
@@ -244,9 +310,13 @@ export default function CreateActivity() {
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold tracking-[0.08em] ${activity.status === "active" ? "bg-[#E7EFE5] text-[#456348]" : "bg-[#ECE9E3] text-[#77776F]"}`}>{activity.status === "active" ? "進行中" : "已停止"}</span>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-[1fr_auto_auto] gap-2">
+                  <div className="mt-4 grid grid-cols-[1fr_auto_auto_auto] gap-2">
                     <button type="button" disabled={enteringId === activity.id || activity.status !== "active"} onClick={() => void handleEnter(activity)} className="flex items-center justify-center gap-2 rounded-lg bg-[#A64E3C] px-3 py-2 text-xs font-semibold text-white hover:bg-[#8F4033] disabled:opacity-60">{enteringId === activity.id ? <Loader2 size={14} className="animate-spin" /> : <DoorOpen size={14} />}加入活動</button>
                     <Link href={`/teacher/activity/${activity.id}`} className="flex items-center justify-center gap-2 rounded-lg border border-[#BFC8C1] px-3 py-2 text-xs font-semibold text-[#355447] hover:bg-[#EDF3EC]"><BarChart3 size={14} /><span className="hidden sm:inline">活動監控</span></Link>
+                    <button type="button" disabled={exportingCsvId === activity.id} onClick={() => void handleExportCsv(activity)} className="flex items-center justify-center gap-1.5 rounded-lg border border-[#BFC8C1] px-3 py-2 text-xs font-semibold text-[#355447] hover:bg-[#EDF3EC] disabled:opacity-50" aria-label={`匯出 ${activity.name || "未命名活動"} CSV`}>
+                      {exportingCsvId === activity.id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                      <span className="hidden sm:inline">CSV</span>
+                    </button>
                     <button type="button" onClick={() => setMenuId(menuId === activity.id ? null : activity.id)} className="flex items-center justify-center rounded-lg border border-[#D5CEC2] px-3 py-2 text-[#56645C] hover:bg-[#F3EEE5]" aria-label="更多操作"><MoreHorizontal size={17} /></button>
                   </div>
 
