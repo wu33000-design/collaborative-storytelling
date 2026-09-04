@@ -9,6 +9,7 @@ type Activity = {
   name: string | null;
   status: string;
   deadline: string | null;
+  closed_reason: string | null;
 };
 
 type GroupDashboardRow = {
@@ -47,10 +48,17 @@ export default function TeacherActivityDashboard() {
     if (!silent) setLoading(true);
     setError(null);
 
+    const { error: deadlineError } = await supabase.rpc("finalize_activity_deadline", { p_activity_id: activityId });
+    if (deadlineError) {
+      setError(deadlineError.message);
+      setLoading(false);
+      return;
+    }
+
     const [activityResult, dashboardResult] = await Promise.all([
       supabase
         .from("activities")
-        .select("id, code, name, status, deadline")
+        .select("id, code, name, status, deadline, closed_reason")
         .eq("id", activityId)
         .maybeSingle(),
       supabase.rpc("get_teacher_activity_dashboard", { p_activity_id: activityId }),
@@ -76,6 +84,31 @@ export default function TeacherActivityDashboard() {
   useEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
+
+  useEffect(() => {
+    if (!activity?.id || activity.status !== "active" || !activity.deadline) return;
+
+    const deadlineMs = Date.parse(activity.deadline);
+    if (!Number.isFinite(deadlineMs)) return;
+
+    let timer: number | undefined;
+    const finalize = async () => {
+      const { error: deadlineError } = await supabase.rpc("finalize_activity_deadline", { p_activity_id: activity.id });
+      if (deadlineError) setError(deadlineError.message);
+      else await loadDashboard(true);
+    };
+
+    const remaining = deadlineMs - Date.now();
+    if (remaining <= 0) {
+      void finalize();
+      return;
+    }
+
+    timer = window.setTimeout(() => void finalize(), Math.min(remaining + 50, 2_147_000_000));
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [activity?.deadline, activity?.id, activity?.status, loadDashboard]);
 
   useEffect(() => {
     if (!activityId) return;
@@ -117,9 +150,7 @@ export default function TeacherActivityDashboard() {
     }
 
     const writerLabel = group.current_writer_name || "目前作者";
-    if (!window.confirm(`確定要跳過 ${group.group_name} 的 ${writerLabel}，並立即換下一棒嗎？\n\n目前 Round 會保留為 expired，不會刪除既有故事內容。`)) {
-      return;
-    }
+    if (!window.confirm(`確定要跳過 ${group.group_name} 的 ${writerLabel}，並立即換下一棒嗎？\n\n目前 Round 會保留為 expired，不會刪除既有故事內容。`)) return;
 
     setSkipBusyGroupId(group.group_id);
     setError(null);
@@ -134,18 +165,19 @@ export default function TeacherActivityDashboard() {
     await loadDashboard(true);
   };
 
-  const summary = useMemo(() => {
-    return {
-      groups: groups.length,
-      members: groups.reduce((sum, group) => sum + Number(group.member_count || 0), 0),
-      completed: groups.filter((group) => group.story_status === "completed").length,
-      writing: groups.filter((group) => group.current_round_status === "writing" || group.current_round_status === "open").length,
-    };
-  }, [groups]);
+  const summary = useMemo(() => ({
+    groups: groups.length,
+    members: groups.reduce((sum, group) => sum + Number(group.member_count || 0), 0),
+    completed: groups.filter((group) => group.story_status === "completed").length,
+    writing: groups.filter((group) => group.current_round_status === "writing" || group.current_round_status === "open").length,
+  }), [groups]);
 
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center bg-[#F5F1E9] text-[#355447]"><Loader2 className="animate-spin" size={28} /></div>;
   }
+
+  const deadlineClosed = activity?.closed_reason === "deadline";
+  const statusLabel = activity?.status === "active" ? "active" : deadlineClosed ? "已截止" : "已停止";
 
   return (
     <div className="min-h-screen bg-[#F5F1E9] px-5 py-10 text-[#1F2E2A] sm:py-14">
@@ -169,10 +201,18 @@ export default function TeacherActivityDashboard() {
                 <div>
                   <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#A06B59]">主持人活動監控 · {activity.code}</div>
                   <h1 className="mt-3 font-serif text-4xl font-semibold tracking-[-0.045em] text-[#233B35] sm:text-5xl">{activityName(activity.name)}</h1>
-                  <p className="mt-4 text-sm leading-7 text-[#68746B]">即時查看所有小組的接力狀態。參與者提交段落、換棒或故事完成後，此頁會自動更新。若目前作者離線或無法完成，主持人可手動跳過該 Round 並換下一棒。</p>
+                  <p className="mt-4 text-sm leading-7 text-[#68746B]">即時查看所有小組的接力狀態。若目前作者離線或無法完成，主持人可手動跳過該 Round 並換下一棒；設定截止時間的活動會在時間到達時自動停止接力。</p>
                 </div>
-                <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${activity.status === "active" ? "bg-[#E7EFE5] text-[#456348]" : "bg-[#ECE9E3] text-[#77776F]"}`}>{activity.status}</span>
+                <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${activity.status === "active" ? "bg-[#E7EFE5] text-[#456348]" : deadlineClosed ? "bg-[#F5E6D8] text-[#8B5E37]" : "bg-[#ECE9E3] text-[#77776F]"}`}>{statusLabel}</span>
               </div>
+
+              {activity.deadline && (
+                <div className={`mt-6 rounded-2xl px-4 py-3 text-sm ${deadlineClosed ? "border border-[#E4C9AA] bg-[#FBF0E4] text-[#7C5635]" : "bg-[#F3EEE5] text-[#68746B]"}`}>
+                  <span className="font-semibold">{deadlineClosed ? "活動已因截止時間停止" : "截止時間"}</span>
+                  <span className="ml-2">{new Date(activity.deadline).toLocaleString()}</span>
+                  {deadlineClosed && <span className="ml-2">未完成的接力 Round 已標記為 expired，既有內容保留。</span>}
+                </div>
+              )}
 
               <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-2xl bg-[#F3EEE5] p-4"><div className="text-xs text-[#7B827B]">小組</div><div className="mt-1 font-serif text-3xl font-semibold text-[#30463D]">{summary.groups}</div></div>
