@@ -23,6 +23,7 @@ type Nomination = { candidate_id: string };
 type Volunteer = { user_id: string };
 
 const displayName = (value: string | null) => value || "未命名活動";
+const storyStatusLabel = (value: string) => value === "active" ? "進行中" : value === "completed" ? "已完成" : value === "closed" || value === "stopped" ? "已停止" : value;
 
 export default function StoryRoom() {
   const [, params] = useRoute("/room/:groupId");
@@ -261,7 +262,7 @@ export default function StoryRoom() {
                   <h1 className="mt-3 font-serif text-4xl font-semibold tracking-[-0.045em] text-[#233B35] sm:text-5xl">{displayName(activity.name)}</h1>
                   <p className="mt-4 max-w-2xl text-sm leading-7 text-[#68746B]">{activity.prompt || story.prompt || "老師沒有設定故事提示。"}</p>
                 </div>
-                <span className="rounded-full bg-[#E7EFE5] px-3 py-1.5 text-xs font-semibold text-[#456348]">{story.status}</span>
+                <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${story.status === "active" ? "bg-[#E7EFE5] text-[#456348]" : "bg-[#ECE9E3] text-[#6F746F]"}`}>{storyStatusLabel(story.status)}</span>
               </div>
 
               <div className="mt-6 rounded-2xl bg-[#F3EEE5] p-5">
@@ -278,8 +279,10 @@ export default function StoryRoom() {
                     <div><div className="font-semibold text-[#30463D]">接力尚未開始</div><div className="mt-1 text-xs leading-5 text-[#68746B]">開始後，後端會依目前 selection weight 抽出第一位作者。</div></div>
                     <button type="button" disabled={startingRound || activity.status !== "active"} onClick={() => void handleStartRound()} className="inline-flex items-center gap-2 rounded-xl bg-[#233B35] px-4 py-2.5 text-sm font-semibold text-[#FFFDF8] disabled:opacity-60">{startingRound ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}開始第一輪</button>
                   </div>
+                ) : story.status === "completed" ? (
+                  <div><div className="font-semibold text-[#30463D]">故事已完成</div><div className="mt-1 text-xs text-[#68746B]">故事已封存為唯讀，不會再建立新的接力輪次。</div></div>
                 ) : (
-                  <div><div className="font-semibold text-[#30463D]">故事已完成</div><div className="mt-1 text-xs text-[#68746B]">不會再建立新的接力輪次。</div></div>
+                  <div><div className="font-semibold text-[#30463D]">故事已停止</div><div className="mt-1 text-xs text-[#68746B]">主持人已停止活動；既有內容保留為唯讀，不會再建立新的接力輪次。</div></div>
                 )}
               </div>
             </header>
@@ -287,7 +290,7 @@ export default function StoryRoom() {
             <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.75fr)]">
               <div className="space-y-6">
                 <section className="rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-7 shadow-sm sm:p-8">
-                  <div className="flex items-center gap-2"><BookOpen size={19} className="text-[#A64E3C]" /><h2 className="font-serif text-2xl font-semibold">目前故事</h2></div>
+                  <div className="flex items-center gap-2"><BookOpen size={19} className="text-[#A64E3C]" /><h2 className="font-serif text-2xl font-semibold">{story.status === "active" ? "目前故事" : "完整故事"}</h2></div>
                   {segments.length === 0 ? (
                     <p className="mt-6 rounded-2xl bg-[#F3EEE5] p-5 text-sm leading-7 text-[#68746B]">目前還沒有任何段落。</p>
                   ) : (
