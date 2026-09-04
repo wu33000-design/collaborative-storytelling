@@ -40,6 +40,7 @@ export default function CreateActivity() {
   const [error, setError] = useState<string | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(true);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [enteringId, setEnteringId] = useState<string | null>(null);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -58,12 +59,19 @@ export default function CreateActivity() {
       return;
     }
 
-    const { data, error: queryError } = await supabase
-      .from("activities")
-      .select("id, code, name, status, created_at")
-      .eq("teacher_id", userId)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false });
+    const [{ data: adminAllowed }, { data, error: queryError }] = await Promise.all([
+      supabase.rpc("is_platform_admin"),
+      supabase
+        .from("activities")
+        .select("id, code, name, status, created_at")
+        .eq("teacher_id", userId)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false }),
+    ]);
+
+    const allowed = Boolean(adminAllowed);
+    setIsPlatformAdmin(allowed);
+    if (!allowed) setGroupSize("");
 
     if (queryError) setError(queryError.message);
     else setActivities((data ?? []) as Activity[]);
@@ -88,7 +96,7 @@ export default function CreateActivity() {
       p_name: name.trim() || null,
       p_prompt: prompt.trim() || null,
       p_initial_text: initialText.trim() || null,
-      p_group_size: optionalInt(groupSize),
+      p_group_size: isPlatformAdmin ? optionalInt(groupSize) : null,
       p_time_limit_seconds: optionalInt(timeLimit),
       p_min_words: optionalInt(minWords),
       p_max_words: optionalInt(maxWords),
@@ -195,10 +203,14 @@ export default function CreateActivity() {
             </div>
 
             <form onSubmit={handleCreate} className="mt-8 space-y-6">
-              <div className="grid gap-5 sm:grid-cols-2">
-                <label className="text-sm"><span className="mb-2 block font-semibold">活動名稱</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="可留白" className="w-full rounded-xl border border-[#CFC8BB] bg-white px-4 py-3 outline-none focus:border-[#355447]" /></label>
-                <label className="text-sm"><span className="mb-2 block font-semibold">每組人數</span><input type="number" min="1" value={groupSize} onChange={(e) => setGroupSize(e.target.value)} placeholder="留白 = 不限人數" className="w-full rounded-xl border border-[#CFC8BB] bg-white px-4 py-3 outline-none focus:border-[#355447]" /></label>
-              </div>
+              <label className="block text-sm"><span className="mb-2 block font-semibold">活動名稱</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="可留白" className="w-full rounded-xl border border-[#CFC8BB] bg-white px-4 py-3 outline-none focus:border-[#355447]" /></label>
+              {isPlatformAdmin && (
+                <div className="rounded-2xl border border-[#D7C9B8] bg-[#F8F2E8] p-4">
+                  <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#A06B59]">平台管理者 · 進階分組</div>
+                  <label className="mt-3 block text-sm"><span className="mb-2 block font-semibold">每組人數</span><input type="number" min="1" value={groupSize} onChange={(e) => setGroupSize(e.target.value)} placeholder="留白 = 單一不限人數故事" className="w-full rounded-xl border border-[#CFC8BB] bg-white px-4 py-3 outline-none focus:border-[#355447]" /></label>
+                  <p className="mt-2 text-xs leading-5 text-[#7B7268]">設定數字後，參與者會自動分入多個獨立故事小組。此功能目前只開放平台管理者。</p>
+                </div>
+              )}
               <label className="block text-sm"><span className="mb-2 block font-semibold">故事提示</span><textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="可留白" rows={3} className="w-full rounded-xl border border-[#CFC8BB] bg-white px-4 py-3 outline-none focus:border-[#355447]" /></label>
               <label className="block text-sm"><span className="mb-2 block font-semibold">Writer 0 初始文字</span><textarea value={initialText} onChange={(e) => setInitialText(e.target.value)} placeholder="可留白；留白時故事從第一位參與者開始" rows={4} className="w-full rounded-xl border border-[#CFC8BB] bg-white px-4 py-3 outline-none focus:border-[#355447]" /></label>
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
