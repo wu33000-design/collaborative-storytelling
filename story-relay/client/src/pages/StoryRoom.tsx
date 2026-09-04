@@ -26,6 +26,15 @@ type Volunteer = { user_id: string };
 
 const displayName = (value: string | null) => value || "未命名活動";
 const storyStatusLabel = (value: string, closedReason: string | null) => closedReason === "deadline" ? "已截止" : value === "active" ? "進行中" : value === "completed" ? "已完成" : value === "closed" || value === "stopped" ? "已停止" : value;
+const formatCountdown = (seconds: number) => {
+  const safe = Math.max(0, seconds);
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const secs = safe % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
+    : `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+};
 
 export default function StoryRoom() {
   const [, params] = useRoute("/room/:groupId");
@@ -47,6 +56,7 @@ export default function StoryRoom() {
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [intentBusy, setIntentBusy] = useState<string | null>(null);
+  const [deadlineRemainingSeconds, setDeadlineRemainingSeconds] = useState<number | null>(null);
 
   const profileMap = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
   const nominatedIds = useMemo(() => new Set(nominations.map((item) => item.candidate_id)), [nominations]);
@@ -158,27 +168,44 @@ export default function StoryRoom() {
   }, [loadRoom]);
 
   useEffect(() => {
-    if (!activity?.id || activity.status !== "active" || !activity.deadline) return;
-
-    const deadlineMs = Date.parse(activity.deadline);
-    if (!Number.isFinite(deadlineMs)) return;
-
-    let timer: number | undefined;
-    const finalize = async () => {
-      const { error: deadlineError } = await supabase.rpc("finalize_activity_deadline", { p_activity_id: activity.id });
-      if (deadlineError) setError(deadlineError.message);
-      else await loadRoom(true);
-    };
-
-    const remaining = deadlineMs - Date.now();
-    if (remaining <= 0) {
-      void finalize();
+    if (!activity?.id || activity.status !== "active" || !activity.deadline) {
+      setDeadlineRemainingSeconds(null);
       return;
     }
 
-    timer = window.setTimeout(() => void finalize(), Math.min(remaining + 50, 2_147_000_000));
+    const deadlineMs = Date.parse(activity.deadline);
+    if (!Number.isFinite(deadlineMs)) {
+      setDeadlineRemainingSeconds(null);
+      return;
+    }
+
+    let finalizing = false;
+    let interval: number | undefined;
+
+    const finalize = async () => {
+      if (finalizing) return;
+      finalizing = true;
+      if (interval !== undefined) window.clearInterval(interval);
+      const { error: deadlineError } = await supabase.rpc("finalize_activity_deadline", { p_activity_id: activity.id });
+      if (deadlineError) {
+        setError(deadlineError.message);
+        finalizing = false;
+      } else {
+        await loadRoom(true);
+      }
+    };
+
+    const tick = () => {
+      const remainingMs = deadlineMs - Date.now();
+      const remainingSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+      setDeadlineRemainingSeconds(remainingSeconds);
+      if (remainingMs <= 0) void finalize();
+    };
+
+    tick();
+    interval = window.setInterval(tick, 1000);
     return () => {
-      if (timer !== undefined) window.clearTimeout(timer);
+      if (interval !== undefined) window.clearInterval(interval);
     };
   }, [activity?.deadline, activity?.id, activity?.status, loadRoom]);
 
@@ -273,6 +300,7 @@ export default function StoryRoom() {
   const belowMinimum = activity?.min_words != null && draftLength < activity.min_words;
   const aboveMaximum = activity?.max_words != null && draftLength > activity.max_words;
   const deadlineClosed = activity?.closed_reason === "deadline";
+  const deadlineImminent = deadlineRemainingSeconds != null && deadlineRemainingSeconds <= 60;
 
   return (
     <div className="min-h-screen bg-[#F5F1E9] px-5 py-10 text-[#1F2E2A] sm:py-14">
@@ -298,6 +326,13 @@ export default function StoryRoom() {
                   <h1 className="mt-3 font-serif text-4xl font-semibold tracking-[-0.045em] text-[#233B35] sm:text-5xl">{displayName(activity.name)}</h1>
                   <p className="mt-4 max-w-2xl text-sm leading-7 text-[#68746B]">{activity.prompt || story.prompt || "老師沒有設定故事提示。"}</p>
                   {activity.deadline && <p className="mt-2 text-xs text-[#8A8F86]">截止時間：{new Date(activity.deadline).toLocaleString()}</p>}
+                  {activity.status === "active" && deadlineRemainingSeconds != null && (
+                    <div className={`mt-4 inline-flex items-center gap-2 rounded-xl px-3.5 py-2 ${deadlineImminent ? "bg-[#F7E5DF] text-[#8D4033]" : "bg-[#EDF3EC] text-[#355447]"}`}>
+                      <Clock3 size={15} />
+                      <span className="text-xs font-semibold">{deadlineImminent ? "即將截止" : "距離截止"}</span>
+                      <span className="font-mono text-sm font-bold tabular-nums">{formatCountdown(deadlineRemainingSeconds)}</span>
+                    </div>
+                  )}
                 </div>
                 <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${story.status === "active" ? "bg-[#E7EFE5] text-[#456348]" : deadlineClosed ? "bg-[#F5E6D8] text-[#8B5E37]" : "bg-[#ECE9E3] text-[#6F746F]"}`}>{storyStatusLabel(story.status, activity.closed_reason)}</span>
               </div>
