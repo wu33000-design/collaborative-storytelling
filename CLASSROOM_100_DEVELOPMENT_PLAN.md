@@ -187,6 +187,10 @@
 
 ## D1 接力異常處理
 
+**狀態：完成（2026-09-04）。**
+
+**結果：PASS。** `skip_relay_round(uuid)` 僅允許活動主持人操作；被跳過的 active round 保留並標記為 `expired`，不增加 `times_written`；多人組排除被跳過 writer 後依既有 nomination / selection weight 選下一位，單人組沿用 fallback；寫入 activity events 供 dashboard / Realtime 更新。Rollback SQL 測試通過，且真實 UI smoke test 已確認 Round 6 → Round 7 並實際把 current writer 切換至另一位同名成員。
+
 - current writer 離線／無法完成。
 - 主持人可手動 expire / skip 當前 round。
 - 保留歷史，不刪除既有 round／segment。
