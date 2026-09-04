@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, BookOpen, Clock3, Download, Loader2, RefreshCw, SkipForward, Users } from "lucide-react";
+import { ArrowLeft, BookOpen, Clock3, Loader2, RefreshCw, SkipForward, Users } from "lucide-react";
 import { Link, useRoute } from "wouter";
 import { supabase } from "@/lib/supabase";
 
@@ -26,30 +26,7 @@ type GroupDashboardRow = {
   last_activity_at: string;
 };
 
-type TeacherCsvRow = {
-  group_id: string;
-  group_name: string;
-  user_id: string;
-  display_name: string | null;
-  role: string;
-  joined_at: string;
-  left_at: string | null;
-  rounds_selected: number;
-  segments_written: number;
-  total_characters: number;
-  first_submission_at: string | null;
-  last_submission_at: string | null;
-};
-
 const activityName = (value: string | null) => value || "未命名活動";
-
-const csvCell = (value: string | number | null) => {
-  let text = value == null ? "" : String(value);
-  if (typeof value === "string" && /^\s*[=+\-@]/.test(text)) text = `'${text}`;
-  return `"${text.replace(/"/g, '""')}"`;
-};
-
-const safeFilePart = (value: string) => value.replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, "-").slice(0, 80) || "activity";
 
 export default function TeacherActivityDashboard() {
   const [, params] = useRoute("/teacher/activity/:activityId");
@@ -59,7 +36,6 @@ export default function TeacherActivityDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [skipBusyGroupId, setSkipBusyGroupId] = useState<string | null>(null);
-  const [exportingCsv, setExportingCsv] = useState(false);
 
   const loadDashboard = useCallback(async (silent = false) => {
     if (!activityId) {
@@ -158,49 +134,6 @@ export default function TeacherActivityDashboard() {
     await loadDashboard(true);
   };
 
-  const handleExportCsv = async () => {
-    if (!activityId || !activity) return;
-    setExportingCsv(true);
-    setError(null);
-
-    const { data, error: rpcError } = await supabase.rpc("get_teacher_activity_csv", { p_activity_id: activityId });
-    if (rpcError) {
-      setError(rpcError.message);
-      setExportingCsv(false);
-      return;
-    }
-
-    const rows = (data ?? []) as TeacherCsvRow[];
-    const headers = ["小組", "參與者ID", "顯示名稱", "角色", "加入時間", "離開時間", "被選Round次數", "投稿段數", "總字元數", "首次投稿時間", "最後投稿時間"];
-    const csvRows = [
-      headers.map(csvCell).join(","),
-      ...rows.map((row) => [
-        row.group_name,
-        row.user_id,
-        row.display_name,
-        row.role,
-        row.joined_at,
-        row.left_at,
-        row.rounds_selected,
-        row.segments_written,
-        row.total_characters,
-        row.first_submission_at,
-        row.last_submission_at,
-      ].map(csvCell).join(",")),
-    ];
-
-    const blob = new Blob(["\uFEFF", csvRows.join("\r\n")], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${safeFilePart(activity.code)}-${safeFilePart(activityName(activity.name))}-participants.csv`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
-    setExportingCsv(false);
-  };
-
   const summary = useMemo(() => {
     return {
       groups: groups.length,
@@ -219,13 +152,7 @@ export default function TeacherActivityDashboard() {
       <main className="mx-auto max-w-6xl">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <Link href="/create" className="inline-flex items-center gap-2 text-sm text-[#68746B] hover:text-[#233B35]"><ArrowLeft size={16} />回到主持人區</Link>
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={() => void handleExportCsv()} disabled={!activity || exportingCsv} className="inline-flex items-center gap-2 rounded-lg border border-[#CFC8BB] bg-[#FFFDF8] px-3 py-2 text-xs font-semibold text-[#355447] hover:bg-[#F3EEE5] disabled:opacity-50">
-              {exportingCsv ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-              {exportingCsv ? "匯出中…" : "匯出 CSV"}
-            </button>
-            <button type="button" onClick={() => void loadDashboard()} className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-[#68746B] hover:bg-[#E9E3D8]"><RefreshCw size={14} />重新整理</button>
-          </div>
+          <button type="button" onClick={() => void loadDashboard()} className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-[#68746B] hover:bg-[#E9E3D8]"><RefreshCw size={14} />重新整理</button>
         </div>
 
         {error && (
@@ -242,7 +169,7 @@ export default function TeacherActivityDashboard() {
                 <div>
                   <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#A06B59]">主持人活動監控 · {activity.code}</div>
                   <h1 className="mt-3 font-serif text-4xl font-semibold tracking-[-0.045em] text-[#233B35] sm:text-5xl">{activityName(activity.name)}</h1>
-                  <p className="mt-4 text-sm leading-7 text-[#68746B]">即時查看所有小組的接力狀態。參與者提交段落、換棒或故事完成後，此頁會自動更新。若目前作者離線或無法完成，主持人可手動跳過該 Round 並換下一棒。CSV 只匯出本活動的參與統計，不包含故事全文。</p>
+                  <p className="mt-4 text-sm leading-7 text-[#68746B]">即時查看所有小組的接力狀態。參與者提交段落、換棒或故事完成後，此頁會自動更新。若目前作者離線或無法完成，主持人可手動跳過該 Round 並換下一棒。</p>
                 </div>
                 <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${activity.status === "active" ? "bg-[#E7EFE5] text-[#456348]" : "bg-[#ECE9E3] text-[#77776F]"}`}>{activity.status}</span>
               </div>
