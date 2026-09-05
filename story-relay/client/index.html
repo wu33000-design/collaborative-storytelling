@@ -9,7 +9,38 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (function () {
+        var shown = false;
+
+        function showStartupFallback() {
+          var root = document.getElementById("root");
+          if (shown || !root || root.childNodes.length > 0) return;
+          shown = true;
+          root.innerHTML =
+            '<main style="box-sizing:border-box;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F5F1E9;padding:24px;color:#1F2E2A;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">' +
+            '<section style="box-sizing:border-box;width:100%;max-width:420px;border:1px solid #D8D2C6;border-radius:20px;background:#FFFDF8;padding:28px">' +
+            '<h1 style="margin:0 0 12px;font-size:24px;color:#233B35">Story Relay 無法啟動</h1>' +
+            '<p style="margin:0 0 20px;line-height:1.7;color:#68746B">網頁程式沒有正常載入。請重新載入頁面；如果問題持續發生，請回報使用的瀏覽器與系統版本。</p>' +
+            '<button type="button" onclick="window.location.reload()" style="border:0;border-radius:10px;background:#233B35;color:#FFFDF8;padding:11px 16px;font-size:15px;font-weight:600">重新載入</button>' +
+            '</section></main>';
+        }
+
+        window.__storyRelayShowStartupFallback = showStartupFallback;
+        window.addEventListener(
+          "error",
+          function (event) {
+            var target = event.target;
+            if (target && target.tagName === "SCRIPT") showStartupFallback();
+          },
+          true
+        );
+        window.addEventListener("unhandledrejection", function () {
+          window.setTimeout(showStartupFallback, 0);
+        });
+        window.setTimeout(showStartupFallback, 12000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
-    <script defer src="%VITE_ANALYTICS_ENDPOINT%/umami" data-website-id="%VITE_ANALYTICS_WEBSITE_ID%"></script>
   </body>
 </html>
