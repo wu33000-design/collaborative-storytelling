@@ -24,6 +24,14 @@ type NameHistory = { id: string; old_name: string | null; new_name: string | nul
 type RelayRound = { id: string; round_no: number; current_writer_id: string; status: string; started_at: string };
 type Nomination = { candidate_id: string };
 type Volunteer = { user_id: string };
+type NextWriterProbability = {
+  user_id: string;
+  probability_pct: number | string;
+  effective_weight: number | string;
+  is_volunteer: boolean;
+  is_nominated: boolean;
+  selection_mode: string;
+};
 
 const displayName = (value: string | null) => value || "未命名活動";
 const storyStatusLabel = (value: string, closedReason: string | null) => closedReason === "deadline" ? "已截止" : value === "active" ? "進行中" : value === "completed" ? "已完成" : value === "closed" || value === "stopped" ? "已停止" : value;
@@ -52,6 +60,7 @@ export default function StoryRoom() {
   const [round, setRound] = useState<RelayRound | null>(null);
   const [nominations, setNominations] = useState<Nomination[]>([]);
   const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
+  const [nextWriterProbabilities, setNextWriterProbabilities] = useState<NextWriterProbability[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [startingRound, setStartingRound] = useState(false);
   const [draft, setDraft] = useState("");
@@ -62,6 +71,7 @@ export default function StoryRoom() {
   const profileMap = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
   const nominatedIds = useMemo(() => new Set(nominations.map((item) => item.candidate_id)), [nominations]);
   const volunteerIds = useMemo(() => new Set(volunteers.map((item) => item.user_id)), [volunteers]);
+  const probabilityMap = useMemo(() => new Map(nextWriterProbabilities.map((item) => [item.user_id, item])), [nextWriterProbabilities]);
 
   const loadRoom = useCallback(async (silent = false) => {
     if (!groupId) {
@@ -147,18 +157,21 @@ export default function StoryRoom() {
     setRound(loadedRound);
 
     if (loadedRound) {
-      const [nominationResult, volunteerResult] = await Promise.all([
+      const [nominationResult, volunteerResult, probabilityResult] = await Promise.all([
         supabase.from("nominations").select("candidate_id").eq("round_id", loadedRound.id),
         supabase.from("volunteers").select("user_id").eq("round_id", loadedRound.id),
+        supabase.rpc("get_next_writer_probabilities", { p_round_id: loadedRound.id }),
       ]);
-      if (nominationResult.error || volunteerResult.error) {
-        setError(nominationResult.error?.message || volunteerResult.error?.message || "讀取下一棒意向失敗。");
+      if (nominationResult.error || volunteerResult.error || probabilityResult.error) {
+        setError(nominationResult.error?.message || volunteerResult.error?.message || probabilityResult.error?.message || "讀取下一棒資訊失敗。");
       }
       setNominations((nominationResult.data ?? []) as Nomination[]);
       setVolunteers((volunteerResult.data ?? []) as Volunteer[]);
+      setNextWriterProbabilities((probabilityResult.data ?? []) as NextWriterProbability[]);
     } else {
       setNominations([]);
       setVolunteers([]);
+      setNextWriterProbabilities([]);
     }
 
     setLoading(false);
@@ -299,6 +312,10 @@ export default function StoryRoom() {
   const currentWriter = round ? profileMap.get(round.current_writer_id) : null;
   const isCurrentWriter = Boolean(round && currentUserId && round.current_writer_id === currentUserId);
   const hasVolunteered = Boolean(currentUserId && volunteerIds.has(currentUserId));
+  const nextWriterLocked = volunteers.length > 0 || nominations.length > 0;
+  const lockedByVolunteer = volunteers.length > 0;
+  const lockedWriterId = volunteers[0]?.user_id ?? nominations[0]?.candidate_id ?? null;
+  const lockedWriterName = lockedWriterId ? profileMap.get(lockedWriterId)?.display_name || "參與者" : null;
   const draftLength = draft.trim().length;
   const belowMinimum = activity?.min_words != null && draftLength < activity.min_words;
   const aboveMaximum = activity?.max_words != null && draftLength > activity.max_words;
@@ -328,7 +345,7 @@ export default function StoryRoom() {
                 <div>
                   <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#A06B59]">{activity.code} · {group.name}</div>
                   <h1 className="mt-3 font-serif text-4xl font-semibold tracking-[-0.045em] text-[#233B35] sm:text-5xl">{displayName(activity.name)}</h1>
-                  <p className="mt-4 max-w-2xl text-sm leading-7 text-[#68746B]">{activity.prompt || story.prompt || "老師沒有設定故事提示。"}</p>
+                  <p className="mt-4 max-w-2xl text-sm leading-7 text-[#68746B]">{activity.prompt || story.prompt || "主持人沒有設定故事提示。"}</p>
                   {activity.deadline && <p className="mt-2 text-xs text-[#8A8F86]">截止時間：{new Date(activity.deadline).toLocaleString()}</p>}
                 </div>
                 <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${story.status === "active" ? "bg-[#E7EFE5] text-[#456348]" : deadlineClosed ? "bg-[#F5E6D8] text-[#8B5E37]" : "bg-[#ECE9E3] text-[#6F746F]"}`}>{storyStatusLabel(story.status, activity.closed_reason)}</span>
@@ -340,6 +357,7 @@ export default function StoryRoom() {
                     <div>
                       <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#A06B59]">Round {round.round_no} · {round.status}</div>
                       <div className="mt-1 text-sm text-[#34453E]">目前作者：<span className="font-semibold">{currentWriter?.display_name || "參與者"}</span></div>
+                      {nextWriterLocked && <div className="mt-1 text-xs font-semibold text-[#8D4033]">下一棒已鎖定：{lockedWriterName}（{lockedByVolunteer ? "自願" : "提名"}）</div>}
                     </div>
                     {isCurrentWriter && <span className="rounded-full bg-[#DDE9DE] px-3 py-1 text-xs font-semibold text-[#355447]">輪到你了</span>}
                   </div>
@@ -409,10 +427,10 @@ export default function StoryRoom() {
                             {submitting ? "提交中…" : "提交這一段"}
                           </button>
                         </div>
-                        <p className="mt-3 text-xs leading-5 text-[#8A8F86]">{nominations.length > 0 ? `提交後只會從 ${nominations.length} 位提名者中依等待權重抽選下一棒。` : "目前沒有提名；提交後會從所有合資格同學中依等待權重抽選下一棒。"}</p>
+                        <p className="mt-3 text-xs leading-5 text-[#8A8F86]">{nextWriterLocked ? `${lockedWriterName} 已以${lockedByVolunteer ? "自願" : "提名"}鎖定為下一棒。` : "目前沒有自願或提名；提交後會依畫面顯示的等待權重機率抽選下一棒。"}</p>
                       </form>
                     ) : (
-                      <div className="mt-5 rounded-2xl bg-[#F3EEE5] p-5 text-sm leading-7 text-[#68746B]">等待 <span className="font-semibold text-[#30463D]">{currentWriter?.display_name || "目前作者"}</span> 完成這一段。提交後系統會依提名候選池與最新等待權重選出下一位作者。</div>
+                      <div className="mt-5 rounded-2xl bg-[#F3EEE5] p-5 text-sm leading-7 text-[#68746B]">等待 <span className="font-semibold text-[#30463D]">{currentWriter?.display_name || "目前作者"}</span> 完成這一段。{nextWriterLocked ? ` 下一棒已鎖定為 ${lockedWriterName}。` : " 提交後系統會依目前顯示的機率抽出下一位作者。"}</div>
                     )}
                   </section>
                 )}
@@ -421,16 +439,19 @@ export default function StoryRoom() {
               <aside className="space-y-6">
                 <section className="rounded-3xl border border-[#D8D2C6] bg-[#FFFDF8] p-6 shadow-sm">
                   <div className="flex items-center gap-2"><Users size={18} className="text-[#355447]" /><h2 className="font-serif text-xl font-semibold">小組成員</h2></div>
-                  {round && story.status === "active" && <p className="mt-2 text-xs leading-5 text-[#7B827B]">在自己的名字旁登記想接下一棒；目前作者可在其他成員旁提名候選人。</p>}
+                  {round && story.status === "active" && <p className="mt-2 text-xs leading-5 text-[#7B827B]">第一個成功的自願或提名會鎖定下一棒；若都沒有，系統依等待權重抽選。所有人看到相同的即時機率。</p>}
                   <div className="mt-4 space-y-3">
                     {members.map((member) => {
                       const profile = profileMap.get(member.user_id);
                       const selected = round?.current_writer_id === member.user_id;
                       const volunteered = volunteerIds.has(member.user_id);
                       const nominated = nominatedIds.has(member.user_id);
+                      const probability = probabilityMap.get(member.user_id);
+                      const probabilityPct = Number(probability?.probability_pct ?? 0);
+                      const effectiveWeight = Number(probability?.effective_weight ?? 0);
                       const isSelf = currentUserId === member.user_id;
-                      const canVolunteer = Boolean(round && story.status === "active" && isSelf && member.role === "student" && !isCurrentWriter);
-                      const canNominate = Boolean(round && story.status === "active" && isCurrentWriter && !isSelf && member.role === "student");
+                      const canVolunteer = Boolean(round && story.status === "active" && !nextWriterLocked && isSelf && member.role === "student" && !isCurrentWriter);
+                      const canNominate = Boolean(round && story.status === "active" && !nextWriterLocked && isCurrentWriter && !isSelf && member.role === "student");
 
                       return (
                         <div key={member.user_id} className={`flex items-center gap-3 rounded-xl px-3 py-3 ${selected ? "bg-[#E7EFE5]" : "bg-[#F6F1E8]"}`}>
@@ -438,6 +459,11 @@ export default function StoryRoom() {
                           <div className="min-w-0 flex-1">
                             <div className="text-sm font-semibold">{profile?.display_name || "參與者"}{isSelf ? <span className="ml-1 text-[10px] font-normal text-[#8A8F86]">（你）</span> : null}</div>
                             <div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-[#8A8F86]">{member.role}{selected ? " · current writer" : ""}{volunteered ? " · volunteer" : ""}{nominated ? " · nominated" : ""}</div>
+                            {round && story.status === "active" && member.role === "student" && (
+                              <div className={`mt-1 text-xs font-semibold ${probabilityPct === 100 ? "text-[#8D4033]" : "text-[#355447]"}`}>
+                                下一棒 {probabilityPct.toFixed(1)}%{probability?.selection_mode === "weighted_random" && effectiveWeight > 0 ? ` · 權重 ${effectiveWeight}` : ""}
+                              </div>
+                            )}
                           </div>
 
                           {round && story.status === "active" && isSelf && member.role === "student" && (
@@ -446,10 +472,10 @@ export default function StoryRoom() {
                               disabled={!canVolunteer || hasVolunteered || intentBusy === "volunteer"}
                               onClick={() => void handleVolunteer()}
                               className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition ${hasVolunteered ? "bg-[#DDE9DE] text-[#355447]" : "bg-[#355447] text-[#FFFDF8] hover:bg-[#426558]"} disabled:cursor-not-allowed disabled:opacity-55`}
-                              title={isCurrentWriter ? "目前作者不能登記成為自己的下一棒" : "登記想接下一棒"}
+                              title={isCurrentWriter ? "目前作者不能自願成為自己的下一棒" : nextWriterLocked ? "下一棒已經鎖定" : "自願成為下一棒；成功後即鎖定 100%"}
                             >
                               {intentBusy === "volunteer" ? <Loader2 size={13} className="animate-spin" /> : hasVolunteered ? <Check size={13} /> : <Hand size={13} />}
-                              {hasVolunteered ? "已登記" : "登記"}
+                              {hasVolunteered ? "已自願" : "自願"}
                             </button>
                           )}
 
@@ -459,6 +485,7 @@ export default function StoryRoom() {
                               disabled={nominated || intentBusy === member.user_id}
                               onClick={() => void handleNominate(member.user_id)}
                               className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition ${nominated ? "bg-[#F1DCD5] text-[#8D4033]" : "bg-[#A64E3C] text-[#FFFDF8] hover:bg-[#8D4033]"} disabled:cursor-not-allowed disabled:opacity-65`}
+                              title="提名後即鎖定此人為下一棒"
                             >
                               {intentBusy === member.user_id ? <Loader2 size={13} className="animate-spin" /> : nominated ? <Check size={13} /> : null}
                               {nominated ? "已提名" : "提名"}
